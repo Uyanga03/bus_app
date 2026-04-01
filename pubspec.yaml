@@ -1,0 +1,36 @@
+name: BUS_APP 
+description: "A new Flutter transit application project."
+
+# 1. SDK-ийн хувилбарын хязгаарлалт (Заавал байх ёстой)
+environment:
+  sdk: '>=3.10.0 <4.0.0'
+
+# 2. Апп-д ашиглаж буй нэмэлт сангууд
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # API-аас дата татахад ашиглана
+  http: ^1.1.0
+  
+  # Утасны дугаар руу залгахад ашиглана
+  url_launcher: ^6.2.5
+  
+  # Икон болон бусад хэрэгслүүд
+  cupertino_icons: ^1.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+# 3. Flutter-ийн үндсэн тохиргоо болон зургууд (Assets)
+flutter:
+  uses-material-design: true
+
+  # 🖼️ Зургуудыг бүртгэх хэсэг
+  assets:
+    - assets/images/
+    # Хэрэв дээрх мөрөөр бүх зураг уншихгүй бол нэг бүрчлэн ингэж бичнэ:
+    # - assets/images/ulbarsharbus.png
+    # - assets/images/ad_banner.png

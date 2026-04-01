@@ -7,7 +7,7 @@ class DetailScreen extends StatelessWidget {
 
   const DetailScreen({super.key, required this.params});
 
-  // 📞 Утас руу залгах функц (React Native-ийн Linking.openURL-тэй ижил)
+  //  Утас руу залгах функц (React Native-ийн Linking.openURL-тэй ижил)
   Future<void> _makeCall(String phoneNumber) async {
     final Uri launchUri = Uri(
       scheme: 'tel',
@@ -45,7 +45,7 @@ class DetailScreen extends StatelessWidget {
         padding: const EdgeInsets.all(15),
         child: Column(
           children: [
-            // 🔶 CARD
+            //  CARD
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -63,7 +63,7 @@ class DetailScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 🚌 BUS INFO ROW
+                  //  BUS INFO ROW
                   Row(
                     children: [
                       Image.asset(
@@ -90,7 +90,7 @@ class DetailScreen extends StatelessWidget {
                   const Divider(color: Color(0xFFEEEEEE)),
                   const SizedBox(height: 20),
 
-                  // 📞 PHONE BOX
+                  //  PHONE BOX
                   InkWell(
                     onTap: () => _makeCall(phone),
                     borderRadius: BorderRadius.circular(12),

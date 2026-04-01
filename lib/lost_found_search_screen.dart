@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:BUS_APP/bus_detail_screen.dart';
 
-class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key});
+class LostFoundSearchScreen extends StatefulWidget {
+  const LostFoundSearchScreen({super.key});
 
   @override
-  State<SearchScreen> createState() => _SearchScreenState();
+  State<LostFoundSearchScreen> createState() => _LostFoundSearchScreenState();
 }
 
-class _SearchScreenState extends State<SearchScreen> {
+class _LostFoundSearchScreenState extends State<LostFoundSearchScreen> {
   String query = '';
   List<dynamic> routes = [];
   List<dynamic> filteredRoutes = [];
@@ -22,9 +23,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Future<void> fetchRoutes() async {
-    // Өөрийн API URL-аа энд солино уу
-    const String url = "http://10.0.2.2:3000/api/routes"; 
-    
+    const String url = "http://10.0.2.2:3000/api/routes";
     try {
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
@@ -68,12 +67,17 @@ class _SearchScreenState extends State<SearchScreen> {
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text("Гээгдсэн эд зүйлс хайх", 
-          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+        title: const Text(
+          "Гээгдсэн эд зүйлс хайх",
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
       body: Column(
         children: [
-          // Хайлтын хэсэг
           Container(
             margin: const EdgeInsets.all(15),
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -92,25 +96,35 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
             ),
           ),
-
           Expanded(
-            child: isLoading 
-              ? const Center(child: CircularProgressIndicator())
-              : filteredRoutes.isEmpty && query.isNotEmpty
-                ? const Center(child: Text("Илэрц олдсонгүй."))
-                : ListView.builder(
-                    itemCount: filteredRoutes.length,
-                    itemBuilder: (context, index) {
-                      final item = filteredRoutes[index];
-                      return ListTile(
-                        title: Text("${item['name']} - ${item['full']}"),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () {
-                          // Дэлгэрэнгүй рүү шилжих
+            child: isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : filteredRoutes.isEmpty && query.isNotEmpty
+                    ? const Center(child: Text("Илэрц олдсонгүй."))
+                    : ListView.builder(
+                        itemCount: filteredRoutes.length,
+                        itemBuilder: (context, index) {
+                          final item = filteredRoutes[index];
+                          return ListTile(
+                            title: Text("${item['name']} - ${item['full']}"),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => DetailScreen(
+                                    params: {
+                                      'name': item['name'] ?? '',
+                                      'full': item['full'] ?? '',
+                                      'phone': item['phone'] ?? '',
+                                    },
+                                  ),
+                                ),
+                              );
+                            },
+                          );
                         },
-                      );
-                    },
-                  ),
+                      ),
           ),
         ],
       ),

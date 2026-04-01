@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:BUS_APP/lost_found_search_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -83,9 +84,9 @@ class HomeScreen extends StatelessWidget {
                         if (item['title'] == 'Юм мартаж буусан уу?') {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => const lost_found_search_screen()),
-                          ); 
-                        // Navigator.pushNamed(context, '/search');
+                            MaterialPageRoute(builder: (context) => const LostFoundSearchScreen()),
+                          );
+                        }
                       },
                       borderRadius: BorderRadius.circular(10),
                       child: Container(

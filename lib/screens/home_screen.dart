@@ -39,7 +39,7 @@ class HomeScreen extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Image.asset('assets/images/u_money_logo.png', width: 50, height: 35, errorBuilder: (c, e, s) => const Icon(Icons.credit_card)),
+                      Image.asset('assets/images/react-logo.png', width: 50, height: 35, errorBuilder: (c, e, s) => const Icon(Icons.credit_card)),
                       Container(width: 1, height: 30, color: Colors.grey[300], margin: const EdgeInsets.symmetric(horizontal: 10)),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,

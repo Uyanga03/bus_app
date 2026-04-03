@@ -68,7 +68,7 @@ class _LostFoundSearchScreenState extends State<LostFoundSearchScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          "Гээгдсэн эд зүйлс хайх",
+          "Автобус хайх",
           style: TextStyle(
             color: Colors.white,
             fontSize: 16,

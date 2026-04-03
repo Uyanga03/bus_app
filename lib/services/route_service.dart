@@ -4,7 +4,7 @@ import '../models/route_model.dart';
 
 class RouteService {
   // Эмулятор → 10.0.2.2, Бодит утас → компьютерийн IP
-  static const String baseUrl = 'http:// 10.128.216.73/api';
+  static const String baseUrl = 'http://10.128.216.73/api';
 
   // GET /api/routes — бүгдийг татах
   static Future<List<BusRoute>> getAllRoutes() async {

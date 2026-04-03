@@ -11,7 +11,7 @@ dependencies:
     sdk: flutter
   
   # API-аас дата татахад ашиглана
-  http: ^1.1.0
+  http: ^1.2.0
   
   # Утасны дугаар руу залгахад ашиглана
   url_launcher: ^6.2.5

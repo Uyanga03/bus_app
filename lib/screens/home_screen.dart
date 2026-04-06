@@ -39,7 +39,7 @@ class HomeScreen extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Image.asset('assets/images/react-logo.png', width: 50, height: 35, errorBuilder: (c, e, s) => const Icon(Icons.credit_card)),
+                      Image.asset('assets/react-logo.png', width: 50, height: 35, errorBuilder: (c, e, s) => const Icon(Icons.credit_card)),
                       Container(width: 1, height: 30, color: Colors.grey[300], margin: const EdgeInsets.symmetric(horizontal: 10)),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -148,7 +148,7 @@ class HomeScreen extends StatelessWidget {
               height: 75,
               color: Colors.white,
               child: Image.asset(
-                'assets/images/ad_banner.png',
+                'assets/ad_banner.png',
                 fit: BoxFit.fill,
                 errorBuilder: (c, e, s) => Container(color: Colors.grey[200], child: const Icon(Icons.image)),
               ),

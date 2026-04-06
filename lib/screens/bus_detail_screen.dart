@@ -67,7 +67,7 @@ class DetailScreen extends StatelessWidget {
                   Row(
                     children: [
                       Image.asset(
-                        'assets/images/ulbarsharbus.png',
+                        'assets/ulbarsharbus.png',
                         width: 40,
                         height: 40,
                         color: const Color(0xFFF57C00),

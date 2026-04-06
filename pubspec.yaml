@@ -12,12 +12,16 @@ dependencies:
   
   # API-аас дата татахад ашиглана
   http: ^1.2.0
+
+  # Зураг/бичлэг сонгоход ашиглана
+  image_picker: ^1.0.0
   
   # Утасны дугаар руу залгахад ашиглана
   url_launcher: ^6.2.5
   
   # Икон болон бусад хэрэгслүүд
   cupertino_icons: ^1.0.2
+  shared_preferences: ^2.2.2 
 
 dev_dependencies:
   flutter_test:
@@ -30,7 +34,7 @@ flutter:
 
   # 🖼️ Зургуудыг бүртгэх хэсэг
   assets:
-    - assets/images/
+    - assets/
     # Хэрэв дээрх мөрөөр бүх зураг уншихгүй бол нэг бүрчлэн ингэж бичнэ:
     # - assets/images/ulbarsharbus.png
     # - assets/images/ad_banner.png

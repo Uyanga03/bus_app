@@ -60,6 +60,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         body: json.encode({
           'currentPassword': current,
           'newPassword': newPw,
+          'phone': widget.user['phone'] ?? '',
+          'userId': widget.user['id'] ?? '',
         }),
       );
 
@@ -168,7 +170,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                         Navigator.pop(context);
                       },
                       child: Text(
-                        'Нууц үг мартсан?',
+                        '',
                         style: TextStyle(
                           color: _orange,
                           fontWeight: FontWeight.w600,

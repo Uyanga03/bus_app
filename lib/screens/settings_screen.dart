@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:typed_data';
+import 'dart:convert';
 import 'change_phone_screen.dart';
 import 'change_password_screen.dart';
 
@@ -17,6 +19,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static const _orange = Color(0xFFF57C00);
 
   Uint8List? _profileImageBytes;
+  bool _hasNewImage = false;
   bool _showPhone = false;
   bool _showPassword = false;
 
@@ -31,15 +34,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return parts.length > 1 ? parts.sublist(1).join(' ') : '';
   }
 
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedProfileImage();
+  }
+
+  // Хадгалсан профайл зураг унших
+  Future<void> _loadSavedProfileImage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final imageBase64 = prefs.getString('profileImage');
+    if (imageBase64 != null) {
+      setState(() {
+        _profileImageBytes = base64Decode(imageBase64);
+      });
+    }
+  }
+
+  // Зураг сонгох
   Future<void> _pickProfileImage() async {
     try {
       final picker = ImagePicker();
       final file = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
       if (file != null) {
         final bytes = await file.readAsBytes();
-        setState(() => _profileImageBytes = Uint8List.fromList(bytes));
+        setState(() {
+          _profileImageBytes = Uint8List.fromList(bytes);
+          _hasNewImage = true;
+        });
       }
     } catch (_) {}
+  }
+
+  // Зураг хадгалах
+  Future<void> _saveProfileImage() async {
+    if (_profileImageBytes == null) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('profileImage', base64Encode(_profileImageBytes!));
+
+    setState(() => _hasNewImage = false);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Профайл зураг хадгалагдлаа!'),
+          backgroundColor: _orange,
+        ),
+      );
+    }
   }
 
   @override
@@ -87,7 +130,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               child: Column(
                 children: [
-                  // ── Профайл зураг (дарж солих боломжтой) ──
+                  // ── Профайл зураг ──
                   GestureDetector(
                     onTap: _pickProfileImage,
                     child: Stack(
@@ -129,26 +172,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+
+                  // ── Хадгалах + Болих товч (шинэ зураг сонгосон үед) ──
+                  if (_hasNewImage) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Болих
+                        SizedBox(
+                          width: 120,
+                          height: 38,
+                          child: OutlinedButton(
+                            onPressed: () {
+                              setState(() {
+                                _hasNewImage = false;
+                                _loadSavedProfileImage(); // Хуучин зураг руу буцах
+                              });
+                            },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.grey.shade600,
+                              side: BorderSide(color: Colors.grey.shade400),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                            ),
+                            child: const Text('Болих',
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // Хадгалах
+                        SizedBox(
+                          width: 120,
+                          height: 38,
+                          child: ElevatedButton.icon(
+                            onPressed: _saveProfileImage,
+                            icon: const Icon(Icons.save, size: 18),
+                            label: const Text('Хадгалах',
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _orange,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              elevation: 0,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+
                   const SizedBox(height: 24),
 
-                  // ── Овог (саарал карт) ──
-                  _infoCard(
-                    label: 'Овог',
-                    value: _lastName,
-                  ),
+                  // ── Овог ──
+                  _infoCard(label: 'Овог', value: _lastName),
                   const SizedBox(height: 10),
 
-                  // ── Нэр (саарал карт) ──
-                  _infoCard(
-                    label: 'Нэр',
-                    value: _firstName,
-                  ),
+                  // ── Нэр ──
+                  _infoCard(label: 'Нэр', value: _firstName),
                   const SizedBox(height: 10),
 
-                  // ── Утасны дугаар (засах + нүд icon) ──
+                  // ── Утасны дугаар ──
                   _infoCard(
                     label: 'Утасны дугаар',
-                    value: _showPhone ? _phone : _maskPhone(_phone),
+                    value: _showPhone ? _phone : '••••••••',
                     onEdit: () {
                       Navigator.push(
                         context,
@@ -164,10 +254,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const SizedBox(height: 10),
 
-                  // ── Нууц үг (засах + нүд icon) ──
+                  // ── Нууц үг ──
                   _infoCard(
                     label: 'Нууц үг',
-                    value: _showPassword ? '••••••' : '••••••',
+                    value: _showPassword ? (widget.user['password']?.toString() ?? '••••••••') : '••••••••',
                     onEdit: () {
                       Navigator.push(
                         context,
@@ -191,9 +281,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  Figma загвараар саарал карт
-  // ═══════════════════════════════════════════════════════════════════
   Widget _infoCard({
     required String label,
     required String value,
@@ -216,18 +303,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Text(
                   label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   value,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -251,12 +332,5 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
-  }
-
-  String _maskPhone(String phone) {
-    if (phone.length <= 4) return phone;
-    return phone.substring(0, 2) +
-        '●' * (phone.length - 4) +
-        phone.substring(phone.length - 2);
   }
 }

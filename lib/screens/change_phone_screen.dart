@@ -39,7 +39,11 @@ class _ChangePhoneScreenState extends State<ChangePhoneScreen> {
           if (widget.user['token'] != null)
             'Authorization': 'Bearer ${widget.user['token']}',
         },
-        body: json.encode({'newPhone': newPhone}),
+        body: json.encode({
+          'newPhone': newPhone,
+          'currentPhone': widget.user['phone'] ?? '',
+          'userId': widget.user['id'] ?? '',
+        }),
       );
 
       if (response.statusCode == 200) {

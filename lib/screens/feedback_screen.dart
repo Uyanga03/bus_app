@@ -51,6 +51,7 @@ class FeedbackContentState extends State<FeedbackContent>
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   bool _isMenuOpen = false;
+  Uint8List? _profileImageBytes; // Профайл зураг
 
   static const List<String> _feedbackTabs = [
     'БҮГД',
@@ -88,6 +89,13 @@ class FeedbackContentState extends State<FeedbackContent>
     if (userJson != null) {
       setState(() {
         _currentUser = json.decode(userJson) as Map<String, dynamic>;
+      });
+    }
+    // Профайл зураг унших
+    final imageBase64 = prefs.getString('profileImage');
+    if (imageBase64 != null) {
+      setState(() {
+        _profileImageBytes = base64Decode(imageBase64);
       });
     }
   }
@@ -185,8 +193,12 @@ class FeedbackContentState extends State<FeedbackContent>
           request.fields['userId'] = _currentUser!['id'] ?? '';
         }
         for (final file in _selectedMedia) {
-          request.files
-              .add(await http.MultipartFile.fromPath('media', file.path));
+          final bytes = await file.readAsBytes();
+          request.files.add(http.MultipartFile.fromBytes(
+            'media',
+            bytes,
+            filename: file.name,
+          ));
         }
         final res = await request.send();
         if (res.statusCode == 201) _onSubmitSuccess();
@@ -567,14 +579,15 @@ class FeedbackContentState extends State<FeedbackContent>
                       // Хэрэглэгчийн зураг
                       if (_currentUser != null) ...[
                         GestureDetector(
-                          onTap: () {
+                          onTap: () async {
                             setState(() => _isMenuOpen = false);
-                            Navigator.push(
+                            await Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => ProfileScreen(user: _currentUser!),
                               ),
                             );
+                            _loadSavedUser(); // Зураг дахин унших
                           },
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -582,14 +595,19 @@ class FeedbackContentState extends State<FeedbackContent>
                               CircleAvatar(
                                 radius: 28,
                                 backgroundColor: Colors.white,
-                                child: Text(
-                                  (_currentUser!['name'] ?? 'Х')[0].toUpperCase(),
-                                  style: const TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFFF57C00),
-                                  ),
-                                ),
+                                backgroundImage: _profileImageBytes != null
+                                    ? MemoryImage(_profileImageBytes!)
+                                    : null,
+                                child: _profileImageBytes == null
+                                    ? Text(
+                                        (_currentUser!['name'] ?? 'Х')[0].toUpperCase(),
+                                        style: const TextStyle(
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFFF57C00),
+                                        ),
+                                      )
+                                    : null,
                               ),
                               const SizedBox(height: 10),
                               Text(
@@ -641,27 +659,29 @@ class FeedbackContentState extends State<FeedbackContent>
                         _menuItem(
                           icon: Icons.person_outline,
                           label: 'Миний профайл',
-                          onTap: () {
+                          onTap: () async {
                             setState(() => _isMenuOpen = false);
-                            Navigator.push(
+                            await Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => ProfileScreen(user: _currentUser!),
                               ),
                             );
+                            _loadSavedUser();
                           },
                         ),
                         _menuItem(
                           icon: Icons.settings_outlined,
                           label: 'Миний тохиргоо',
-                          onTap: () {
+                          onTap: () async {
                             setState(() => _isMenuOpen = false);
-                            Navigator.push(
+                            await Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => SettingsScreen(user: _currentUser!),
                               ),
                             );
+                            _loadSavedUser();
                           },
                         ),
                         _menuItem(
@@ -912,6 +932,12 @@ class FeedbackContentState extends State<FeedbackContent>
     final mediaUrls = item['mediaUrls'] as List<dynamic>? ?? [];
     final isCommentOpen = _expandedCommentId == id;
     final bool hasLiked = _likedPostIds.contains(id);
+    final postUserId = item['userId']?.toString() ?? '';
+
+    // Өөрийн пост мөн эсэх шалгах
+    final bool isMyPost = _currentUser != null &&
+        (postUserId == _currentUser!['id'] ||
+         userName == _currentUser!['name']);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -924,11 +950,16 @@ class FeedbackContentState extends State<FeedbackContent>
               CircleAvatar(
                 radius: 18,
                 backgroundColor: _typeColor(type).withOpacity(0.2),
-                child: Text(
-                  userName.isNotEmpty ? userName[0].toUpperCase() : 'З',
-                  style: TextStyle(
-                      color: _typeColor(type), fontWeight: FontWeight.bold),
-                ),
+                backgroundImage: (isMyPost && _profileImageBytes != null)
+                    ? MemoryImage(_profileImageBytes!)
+                    : null,
+                child: (isMyPost && _profileImageBytes != null)
+                    ? null
+                    : Text(
+                        userName.isNotEmpty ? userName[0].toUpperCase() : 'З',
+                        style: TextStyle(
+                            color: _typeColor(type), fontWeight: FontWeight.bold),
+                      ),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -946,11 +977,14 @@ class FeedbackContentState extends State<FeedbackContent>
                         if (busNumber.isNotEmpty) ...[
                           const Text(' · ',
                               style: TextStyle(color: Colors.grey)),
-                          Text('$busNumber-р чиглэл',
-                              style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Color(0xFFF57C00),
-                                  fontWeight: FontWeight.w500)),
+                          Flexible(
+                            child: Text('$busNumber-р чиглэл',
+                                style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Color(0xFFF57C00),
+                                    fontWeight: FontWeight.w500),
+                                overflow: TextOverflow.ellipsis),
+                          ),
                         ],
                       ],
                     ),
@@ -971,9 +1005,12 @@ class FeedbackContentState extends State<FeedbackContent>
                                   fontWeight: FontWeight.w600)),
                         ),
                         const SizedBox(width: 6),
-                        Text(timeAgo,
-                            style: const TextStyle(
-                                fontSize: 12, color: Color(0xFF999999))),
+                        Flexible(
+                          child: Text(timeAgo,
+                              style: const TextStyle(
+                                  fontSize: 12, color: Color(0xFF999999)),
+                              overflow: TextOverflow.ellipsis),
+                        ),
                       ],
                     ),
                   ],
@@ -1056,14 +1093,19 @@ class FeedbackContentState extends State<FeedbackContent>
   }
 
   // ── Зураг grid ──
+  String _fullMediaUrl(String url) {
+    if (url.startsWith('http')) return url;
+    return 'http://localhost:3000$url';
+  }
+
   Widget _buildMediaGrid(List<dynamic> mediaUrls) {
     if (mediaUrls.length == 1) {
       return GestureDetector(
-        onTap: () => _showFullImage(mediaUrls[0].toString()),
+        onTap: () => _showFullImage(_fullMediaUrl(mediaUrls[0].toString())),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: Image.network(
-            mediaUrls[0].toString(),
+            _fullMediaUrl(mediaUrls[0].toString()),
             width: double.infinity,
             height: 200,
             fit: BoxFit.cover,
@@ -1086,11 +1128,11 @@ class FeedbackContentState extends State<FeedbackContent>
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (_, i) {
           return GestureDetector(
-            onTap: () => _showFullImage(mediaUrls[i].toString()),
+            onTap: () => _showFullImage(_fullMediaUrl(mediaUrls[i].toString())),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: Image.network(
-                mediaUrls[i].toString(),
+                _fullMediaUrl(mediaUrls[i].toString()),
                 width: 200,
                 height: 160,
                 fit: BoxFit.cover,

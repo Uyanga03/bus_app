@@ -485,6 +485,112 @@ app.post('/api/auth/reset-password', async (req, res) => {
   }
 });
 
+// ──────────────────────────────────────────────────────────────────────────
+//  PUT /api/auth/change-phone
+//  Flutter илгээх: { newPhone }
+//  Header: Authorization: Bearer <token> (эсвэл token-гүй бол phone-оор хайна)
+// ──────────────────────────────────────────────────────────────────────────
+app.put('/api/auth/change-phone', async (req, res) => {
+  try {
+    const { newPhone, currentPhone, userId } = req.body;
+
+    if (!newPhone) {
+      return res.status(400).json({ message: 'Шинэ утасны дугаар оруулна уу' });
+    }
+
+    // Давхардал шалгах
+    const exists = await User.findOne({ phone: newPhone });
+    if (exists) {
+      return res.status(400).json({ message: 'Энэ утасны дугаар өөр хэрэглэгчид бүртгэлтэй байна' });
+    }
+
+    // Token, userId, эсвэл хуучин утсаар хэрэглэгч олох
+    let user;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer')) {
+      const token = authHeader.split(' ')[1];
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        user = await User.findById(decoded.id);
+      } catch (_) {}
+    }
+    if (!user && userId) {
+      user = await User.findById(userId);
+    }
+    if (!user && currentPhone) {
+      user = await User.findOne({ phone: currentPhone });
+    }
+
+    if (!user) {
+      return res.status(404).json({ message: 'Хэрэглэгч олдсонгүй' });
+    }
+
+    user.phone = newPhone;
+    await user.save();
+
+    res.status(200).json({
+      message: 'Утасны дугаар амжилттай солигдлоо',
+      phone: newPhone,
+    });
+  } catch (err) {
+    console.error('Change phone алдаа:', err);
+    res.status(500).json({ message: 'Серверийн алдаа' });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+//  PUT /api/auth/change-password
+//  Flutter илгээх: { currentPassword, newPassword }
+//  Header: Authorization: Bearer <token> (эсвэл token-гүй бол phone-оор)
+// ──────────────────────────────────────────────────────────────────────────
+app.put('/api/auth/change-password', async (req, res) => {
+  try {
+    const { currentPassword, newPassword, phone, userId } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Хуучин болон шинэ нууц үгээ оруулна уу' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'Шинэ нууц үг 6-с дээш тэмдэгт байх ёстой' });
+    }
+
+    // Token, userId, эсвэл утсаар хэрэглэгч олох
+    let user;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer')) {
+      const token = authHeader.split(' ')[1];
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        user = await User.findById(decoded.id);
+      } catch (_) {}
+    }
+    if (!user && userId) {
+      user = await User.findById(userId);
+    }
+    if (!user && phone) {
+      user = await User.findOne({ phone });
+    }
+
+    if (!user) {
+      return res.status(404).json({ message: 'Хэрэглэгч олдсонгүй' });
+    }
+
+    // Хуучин нууц үг шалгах
+    const isMatch = await user.matchPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Хуучин нууц үг буруу байна' });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    res.status(200).json({ message: 'Нууц үг амжилттай солигдлоо' });
+  } catch (err) {
+    console.error('Change password алдаа:', err);
+    res.status(500).json({ message: 'Серверийн алдаа' });
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  SERVER START
 // ═══════════════════════════════════════════════════════════════════════════
@@ -501,10 +607,12 @@ app.listen(PORT, () => {
   console.log('  PUT   /api/feedback/:id/like      → likedBy давхар хамгаалалт');
   console.log('  POST  /api/feedback/:id/comment   → ШИНЭ сэтгэгдэл');
   console.log('');
-  console.log('Шинэ Auth endpoints:');
+  console.log('Auth endpoints:');
   console.log('  POST  /api/auth/register');
   console.log('  POST  /api/auth/login');
   console.log('  POST  /api/auth/forgot-password');
   console.log('  POST  /api/auth/verify-otp');
   console.log('  POST  /api/auth/reset-password');
+  console.log('  PUT   /api/auth/change-phone');
+  console.log('  PUT   /api/auth/change-password');
 });

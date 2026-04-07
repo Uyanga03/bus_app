@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:typed_data';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'settings_screen.dart';
 import 'change_phone_screen.dart';
 import 'change_password_screen.dart';
@@ -17,13 +19,25 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   List<dynamic> _myPosts = [];
   bool _isLoading = true;
+  Uint8List? _profileImageBytes;
 
   static const _orange = Color(0xFFF57C00);
 
   @override
   void initState() {
     super.initState();
+    _loadProfileImage();
     _fetchMyPosts();
+  }
+
+  Future<void> _loadProfileImage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final imageBase64 = prefs.getString('profileImage');
+    if (imageBase64 != null) {
+      setState(() {
+        _profileImageBytes = base64Decode(imageBase64);
+      });
+    }
   }
 
   Future<void> _fetchMyPosts() async {
@@ -100,14 +114,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         CircleAvatar(
                           radius: 40,
                           backgroundColor: _orange.withOpacity(0.15),
-                          child: Text(
-                            (widget.user['name'] ?? 'Х')[0].toUpperCase(),
-                            style: const TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                              color: _orange,
-                            ),
-                          ),
+                          backgroundImage: _profileImageBytes != null
+                              ? MemoryImage(_profileImageBytes!)
+                              : null,
+                          child: _profileImageBytes == null
+                              ? Text(
+                                  (widget.user['name'] ?? 'Х')[0].toUpperCase(),
+                                  style: const TextStyle(
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.bold,
+                                    color: _orange,
+                                  ),
+                                )
+                              : null,
                         ),
                         const SizedBox(height: 10),
                         Text(
@@ -160,12 +179,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _settingTile(
                     icon: Icons.settings_outlined,
                     label: 'Миний тохиргоо',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => SettingsScreen(user: widget.user),
-                      ),
-                    ),
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => SettingsScreen(user: widget.user),
+                        ),
+                      );
+                      _loadProfileImage();
+                    },
                   ),
                   _settingTile(
                     icon: Icons.phone_outlined,

@@ -12,6 +12,8 @@ import 'profile_screen.dart';
 import 'settings_screen.dart';
 import 'change_phone_screen.dart';
 import 'change_password_screen.dart';
+import 'driver_post_screen.dart';
+import 'admin_panel_screen.dart';
 
 class FeedbackContent extends StatefulWidget {
   const FeedbackContent({super.key});
@@ -315,6 +317,7 @@ class FeedbackContentState extends State<FeedbackContent>
       });
       _saveUser(result); // Хадгалах
       fetchFeedbacks();
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${result['name']} нэвтэрлээ!'),
@@ -670,6 +673,21 @@ class FeedbackContentState extends State<FeedbackContent>
                             _loadSavedUser();
                           },
                         ),
+                        // Админ бол "Олдсон эд зүйлсийн удирдлага" харагдана
+                        if (_currentUser!['role'] == 'Админ')
+                          _menuItem(
+                            icon: Icons.manage_search,
+                            label: 'Олдсон эд зүйлсийн удирдлага',
+                            onTap: () {
+                              setState(() => _isMenuOpen = false);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => AdminPanelScreen(user: _currentUser!),
+                                ),
+                              );
+                            },
+                          ),
                         _menuItem(
                           icon: Icons.settings_outlined,
                           label: 'Миний тохиргоо',
@@ -810,7 +828,21 @@ class FeedbackContentState extends State<FeedbackContent>
   }
 
   /// Гаднаас FAB дарахад дуудна
-  void showAddDialog() => _showAddDialog();
+  void showAddDialog() {
+    // Жолооч бол тусгай дэлгэц нээнэ
+    if (_currentUser != null && _currentUser!['role'] == 'Жолооч') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DriverPostScreen(user: _currentUser!),
+        ),
+      ).then((result) {
+        if (result == true) fetchFeedbacks();
+      });
+    } else {
+      _showAddDialog();
+    }
+  }
 
   /// Камер FAB дарахад → бүтэн камер дэлгэц нээгдэнэ
   void showCameraPicker() async {

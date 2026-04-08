@@ -90,7 +90,7 @@ const userSchema = new mongoose.Schema({
   firstName:       { type: String, required: true, trim: true },
   phone:           { type: String, required: true, unique: true, trim: true },
   password:        { type: String, required: true, minlength: 6 },
-  role:            { type: String, enum: ['Зорчигч', 'Жолооч', 'Админ'], default: 'Зорчигч' },
+  role:            { type: String, default: 'Зорчигч' },
   isPhoneVerified: { type: Boolean, default: false },
 }, { timestamps: true });
 
@@ -116,6 +116,53 @@ const otpSchema = new mongoose.Schema({
 otpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 const Otp = mongoose.model('Otp', otpSchema);
+
+// ── ШИНЭ: Driver Schema (тусдаа collection) ──
+const driverSchema = new mongoose.Schema({
+  lastName:        { type: String, required: true, trim: true },
+  firstName:       { type: String, required: true, trim: true },
+  phone:           { type: String, required: true, unique: true, trim: true },
+  password:        { type: String, required: true, minlength: 6 },
+  driverLicense:   { type: String, required: true, trim: true },  // Жолоочийн үнэмлэхний дугаар
+  companyCode:     { type: String, required: true, trim: true },  // Компанийн код
+  companyName:     { type: String, default: '' },                  // Компанийн нэр
+  busRoute:        { type: String, default: '' },                  // Хариуцсан чиглэл
+  busNumber:       { type: String, default: '' },                  // Автобусны дугаар
+  role:            { type: String, default: 'Жолооч' },
+  isActive:        { type: Boolean, default: true },               // Идэвхтэй эсэх
+}, { timestamps: true });
+
+driverSchema.pre('save', async function () {
+  if (!this.isModified('password')) return;
+  this.password = await bcrypt.hash(this.password, 10);
+});
+
+driverSchema.methods.matchPassword = async function (entered) {
+  return await bcrypt.compare(entered, this.password);
+};
+
+const Driver = mongoose.model('Driver', driverSchema);
+
+// ── ШИНЭ: Admin Schema (тусдаа collection) ──
+const adminSchema = new mongoose.Schema({
+  lastName:    { type: String, required: true, trim: true },
+  firstName:   { type: String, required: true, trim: true },
+  phone:       { type: String, required: true, unique: true, trim: true },
+  password:    { type: String, required: true, minlength: 6 },
+  role:        { type: String, default: 'Админ' },
+  permissions: { type: [String], default: ['all'] },  // Эрхийн түвшин
+}, { timestamps: true });
+
+adminSchema.pre('save', async function () {
+  if (!this.isModified('password')) return;
+  this.password = await bcrypt.hash(this.password, 10);
+});
+
+adminSchema.methods.matchPassword = async function (entered) {
+  return await bcrypt.compare(entered, this.password);
+};
+
+const Admin = mongoose.model('Admin', adminSchema);
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  UTILS
@@ -331,16 +378,94 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 // ── POST /api/auth/login ──
-// Flutter илгээх: { phone, password, role }
-// Flutter хүлээх: status 200, { user: { _id, name, phone } }
+// Flutter илгээх: { phone, password, role, driverLicense?, companyCode? }
+// Flutter хүлээх: status 200, { user: { _id, name, phone, role } }
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { phone, password } = req.body;
+    const { phone, password, role, driverLicense, companyCode } = req.body;
 
     if (!phone || !password) {
       return res.status(400).json({ message: 'Утас болон нууц үгээ оруулна уу' });
     }
 
+    // ══════════════════════════════════════════
+    //  Жолоочоор нэвтрэх → drivers collection
+    // ══════════════════════════════════════════
+    if (role === 'Жолооч') {
+      if (!driverLicense || !companyCode) {
+        return res.status(400).json({ message: 'Үнэмлэхний дугаар болон компанийн код оруулна уу' });
+      }
+
+      const driver = await Driver.findOne({ phone });
+      if (!driver) {
+        return res.status(401).json({ message: 'Жолоочийн бүртгэл олдсонгүй' });
+      }
+
+      const isMatch = await driver.matchPassword(password);
+      if (!isMatch) {
+        return res.status(401).json({ message: 'Нууц үг буруу байна' });
+      }
+
+      if (driverLicense !== driver.driverLicense) {
+        return res.status(401).json({ message: 'Жолоочийн үнэмлэхний дугаар буруу байна' });
+      }
+
+      if (companyCode !== driver.companyCode) {
+        return res.status(401).json({ message: 'Компанийн код буруу байна' });
+      }
+
+      if (!driver.isActive) {
+        return res.status(403).json({ message: 'Таны бүртгэл идэвхгүй байна' });
+      }
+
+      const token = createToken(driver._id);
+
+      return res.status(200).json({
+        message: 'Амжилттай нэвтэрлээ',
+        token,
+        user: {
+          _id: driver._id,
+          name: `${driver.lastName} ${driver.firstName}`,
+          phone: driver.phone,
+          role: 'Жолооч',
+          busRoute: driver.busRoute,
+          busNumber: driver.busNumber,
+          companyName: driver.companyName,
+        },
+      });
+    }
+
+    // ══════════════════════════════════════════
+    //  Админ → admins collection
+    // ══════════════════════════════════════════
+    if (role === 'Админ') {
+      const admin = await Admin.findOne({ phone });
+      if (!admin) {
+        return res.status(401).json({ message: 'Админ бүртгэл олдсонгүй' });
+      }
+
+      const isMatch = await admin.matchPassword(password);
+      if (!isMatch) {
+        return res.status(401).json({ message: 'Нууц үг буруу байна' });
+      }
+
+      const token = createToken(admin._id);
+
+      return res.status(200).json({
+        message: 'Амжилттай нэвтэрлээ',
+        token,
+        user: {
+          _id: admin._id,
+          name: `${admin.lastName} ${admin.firstName}`,
+          phone: admin.phone,
+          role: 'Админ',
+        },
+      });
+    }
+
+    // ══════════════════════════════════════════
+    //  Зорчигч → users collection
+    // ══════════════════════════════════════════
     const user = await User.findOne({ phone });
     if (!user) {
       return res.status(401).json({ message: 'Утасны дугаар бүртгэлгүй байна' });
@@ -360,7 +485,7 @@ app.post('/api/auth/login', async (req, res) => {
         _id: user._id,
         name: `${user.lastName} ${user.firstName}`,
         phone: user.phone,
-        role: user.role,
+        role: 'Зорчигч',
       },
     });
   } catch (err) {
@@ -587,6 +712,89 @@ app.put('/api/auth/change-password', async (req, res) => {
     res.status(200).json({ message: 'Нууц үг амжилттай солигдлоо' });
   } catch (err) {
     console.error('Change password алдаа:', err);
+    res.status(500).json({ message: 'Серверийн алдаа' });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+//  POST /api/drivers — Жолооч бүртгэх (Админ эсвэл тест зориулалтаар)
+// ──────────────────────────────────────────────────────────────────────────
+app.post('/api/drivers', async (req, res) => {
+  try {
+    const { lastName, firstName, phone, password, driverLicense, companyCode,
+            companyName, busRoute, busNumber } = req.body;
+
+    if (!lastName || !firstName || !phone || !password || !driverLicense || !companyCode) {
+      return res.status(400).json({ message: 'Бүх талбарыг бөглөнө үү' });
+    }
+
+    const exists = await Driver.findOne({ phone });
+    if (exists) {
+      return res.status(400).json({ message: 'Энэ утасны дугаар бүртгэлтэй байна' });
+    }
+
+    const driver = await Driver.create({
+      lastName, firstName, phone, password,
+      driverLicense, companyCode,
+      companyName: companyName || '',
+      busRoute: busRoute || '',
+      busNumber: busNumber || '',
+    });
+
+    res.status(201).json({
+      message: 'Жолооч амжилттай бүртгэгдлээ!',
+      driver: {
+        _id: driver._id,
+        name: `${driver.lastName} ${driver.firstName}`,
+        phone: driver.phone,
+        driverLicense: driver.driverLicense,
+        companyCode: driver.companyCode,
+      },
+    });
+  } catch (err) {
+    console.error('Driver create алдаа:', err);
+    res.status(500).json({ message: 'Серверийн алдаа' });
+  }
+});
+
+// ── GET /api/drivers — Бүх жолооч нарын жагсаалт ──
+app.get('/api/drivers', async (req, res) => {
+  try {
+    const drivers = await Driver.find().select('-password').sort({ createdAt: -1 });
+    res.json(drivers);
+  } catch (err) {
+    res.status(500).json({ message: 'Серверийн алдаа' });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+//  POST /api/admins — Админ үүсгэх (зөвхөн серверээс)
+// ──────────────────────────────────────────────────────────────────────────
+app.post('/api/admins', async (req, res) => {
+  try {
+    const { lastName, firstName, phone, password } = req.body;
+
+    if (!lastName || !firstName || !phone || !password) {
+      return res.status(400).json({ message: 'Бүх талбарыг бөглөнө үү' });
+    }
+
+    const exists = await Admin.findOne({ phone });
+    if (exists) {
+      return res.status(400).json({ message: 'Энэ утасны дугаар бүртгэлтэй байна' });
+    }
+
+    const admin = await Admin.create({ lastName, firstName, phone, password });
+
+    res.status(201).json({
+      message: 'Админ амжилттай бүртгэгдлээ!',
+      admin: {
+        _id: admin._id,
+        name: `${admin.lastName} ${admin.firstName}`,
+        phone: admin.phone,
+      },
+    });
+  } catch (err) {
+    console.error('Admin create алдаа:', err);
     res.status(500).json({ message: 'Серверийн алдаа' });
   }
 });

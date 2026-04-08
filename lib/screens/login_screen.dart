@@ -13,6 +13,8 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _driverLicenseController = TextEditingController();
+  final TextEditingController _companyCodeController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
   String _selectedRole = 'Зорчигч';
@@ -33,6 +35,8 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _phoneController.dispose();
     _passwordController.dispose();
+    _driverLicenseController.dispose();
+    _companyCodeController.dispose();
     _forgotPhoneController.dispose();
     _otpController.dispose();
     _newPasswordController.dispose();
@@ -52,6 +56,18 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    // Жолоочийн нэмэлт шалгалт
+    if (_selectedRole == 'Жолооч') {
+      if (_driverLicenseController.text.trim().isEmpty) {
+        _showSnackBar('Жолоочийн үнэмлэхний дугаар оруулна уу');
+        return;
+      }
+      if (_companyCodeController.text.trim().isEmpty) {
+        _showSnackBar('Компанийн код оруулна уу');
+        return;
+      }
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -62,6 +78,10 @@ class _LoginScreenState extends State<LoginScreen> {
           'phone': phone,
           'password': password,
           'role': _selectedRole,
+          if (_selectedRole == 'Жолооч') ...{
+            'driverLicense': _driverLicenseController.text.trim(),
+            'companyCode': _companyCodeController.text.trim(),
+          },
         }),
       );
 
@@ -217,8 +237,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     ? 'Нууц үгээ мартсан уу?'
                     : _forgotStep == 2
                         ? 'Нэг удаагийн код оруулна уу?'
-                        : 'Нууц үг сэргээх')
-                : 'Юмаа мартаж буусан уу?',
+                        : 'Нууц үг сартаах')
+                : 'Юм мартсан бүгсэн үү?',
             onBack: () {
               if (_showForgotPassword) {
                 if (_forgotStep > 1) {
@@ -334,7 +354,28 @@ class _LoginScreenState extends State<LoginScreen> {
                 setState(() => _obscurePassword = !_obscurePassword),
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
+
+        // ── Жолоочийн нэмэлт талбарууд ──
+        if (_selectedRole == 'Жолооч') ...[
+          _buildLabel('Жолоочийн үнэмлэхний дугаар'),
+          const SizedBox(height: 6),
+          _buildTextField(
+            controller: _driverLicenseController,
+            hint: 'Үнэмлэхний дугаар',
+            prefixIcon: Icons.badge_outlined,
+          ),
+          const SizedBox(height: 16),
+
+          _buildLabel('Компанийн код'),
+          const SizedBox(height: 6),
+          _buildTextField(
+            controller: _companyCodeController,
+            hint: 'Компанийн код',
+            prefixIcon: Icons.business_outlined,
+          ),
+          const SizedBox(height: 16),
+        ],
 
         // ── Нэвтрэх товч ──
         SizedBox(

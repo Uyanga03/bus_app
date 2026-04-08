@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'camera_capture_screen.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
@@ -14,6 +15,8 @@ import 'change_phone_screen.dart';
 import 'change_password_screen.dart';
 import 'driver_post_screen.dart';
 import 'admin_panel_screen.dart';
+import 'chat_list_screen.dart';
+import 'user_profile_screen.dart';
 
 class FeedbackContent extends StatefulWidget {
   const FeedbackContent({super.key});
@@ -76,7 +79,25 @@ class FeedbackContentState extends State<FeedbackContent>
     super.initState();
     _tabController = TabController(length: _feedbackTabs.length, vsync: this);
     _tabController!.addListener(() {
-      if (!_tabController!.indexIsChanging) fetchFeedbacks();
+      if (!_tabController!.indexIsChanging) {
+        // ЧАТ таб дарагдсан бол чат дэлгэц нээнэ
+        if (_tabController!.index == 5 && _currentUser != null) {
+          _tabController!.animateTo(0); // Буцаж БҮГД таб руу
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ChatListScreen(user: _currentUser!),
+            ),
+          );
+          return;
+        }
+        if (_tabController!.index == 5 && _currentUser == null) {
+          _tabController!.animateTo(0);
+          _showLoginPrompt('Чат ашиглахын тулд нэвтэрнэ үү.');
+          return;
+        }
+        fetchFeedbacks();
+      }
     });
     _loadSavedUser(); // Хадгалсан хэрэглэгчийн мэдээлэл унших
     fetchFeedbacks();
@@ -979,19 +1000,34 @@ class FeedbackContentState extends State<FeedbackContent>
           // ── Header: Avatar + нэр + чиглэл + төрөл + цаг ──
           Row(
             children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: _typeColor(type).withOpacity(0.2),
-                backgroundImage: (isMyPost && _profileImageBytes != null)
-                    ? MemoryImage(_profileImageBytes!)
-                    : null,
-                child: (isMyPost && _profileImageBytes != null)
-                    ? null
-                    : Text(
-                        userName.isNotEmpty ? userName[0].toUpperCase() : 'З',
-                        style: TextStyle(
-                            color: _typeColor(type), fontWeight: FontWeight.bold),
+              GestureDetector(
+                onTap: () {
+                  if (_currentUser == null) return;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => UserProfileScreen(
+                        currentUser: _currentUser!,
+                        userName: userName,
+                        userId: postUserId,
                       ),
+                    ),
+                  );
+                },
+                child: CircleAvatar(
+                  radius: 18,
+                  backgroundColor: _typeColor(type).withOpacity(0.2),
+                  backgroundImage: (isMyPost && _profileImageBytes != null)
+                      ? MemoryImage(_profileImageBytes!)
+                      : null,
+                  child: (isMyPost && _profileImageBytes != null)
+                      ? null
+                      : Text(
+                          userName.isNotEmpty ? userName[0].toUpperCase() : 'З',
+                          style: TextStyle(
+                              color: _typeColor(type), fontWeight: FontWeight.bold),
+                        ),
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -1001,10 +1037,25 @@ class FeedbackContentState extends State<FeedbackContent>
                     Row(
                       children: [
                         Flexible(
-                          child: Text(userName,
+                          child: GestureDetector(
+                            onTap: () {
+                              if (_currentUser == null) return;
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => UserProfileScreen(
+                                    currentUser: _currentUser!,
+                                    userName: userName,
+                                    userId: postUserId,
+                                  ),
+                                ),
+                              );
+                            },
+                            child: Text(userName,
                               style: const TextStyle(
                                   fontWeight: FontWeight.bold, fontSize: 14),
                               overflow: TextOverflow.ellipsis),
+                          ),
                         ),
                         if (busNumber.isNotEmpty) ...[
                           const Text(' · ',
@@ -1065,7 +1116,7 @@ class FeedbackContentState extends State<FeedbackContent>
 
           const SizedBox(height: 10),
 
-          // ── ♡ Like  +  💬 Comment товчнууд ──
+          // ── ♡ Like  +  💬 Comment  +  🔗 Share товчнууд ──
           Row(
             children: [
               // Like
@@ -1110,6 +1161,18 @@ class FeedbackContentState extends State<FeedbackContent>
                             fontSize: 13, color: Colors.grey.shade500)),
                   ],
                 ),
+              ),
+              const SizedBox(width: 20),
+              // Share
+              GestureDetector(
+                onTap: () => _showShareSheet(
+                  userName: userName,
+                  message: message,
+                  busNumber: busNumber,
+                  type: type,
+                ),
+                child: Icon(Icons.share_outlined,
+                    size: 18, color: Colors.grey.shade500),
               ),
             ],
           ),
@@ -1212,6 +1275,173 @@ class FeedbackContentState extends State<FeedbackContent>
         ),
       ),
     );
+  }
+
+  // ── Share bottom sheet ──
+  void _showShareSheet({
+    required String userName,
+    required String message,
+    required String busNumber,
+    required String type,
+  }) {
+    final shareText = '$userName${busNumber.isNotEmpty ? ' · $busNumber-р чиглэл' : ''}\n$message';
+    final shareUrl = 'https://bussmartbus.share/$type';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              const Text(
+                'Холбоос хуваалцах',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+
+              // URL хуулах
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F5F5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        shareUrl,
+                        style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        // Clipboard хуулах
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Холбоос хуулагдлаа!'),
+                            backgroundColor: Color(0xFFF57C00),
+                          ),
+                        );
+                      },
+                      child: const Icon(Icons.copy, size: 20, color: Color(0xFFF57C00)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Таалагдсан апп-ууд
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Таалагдсан',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _shareIcon(
+                    icon: Icons.camera_alt,
+                    label: 'Instagram',
+                    color: const Color(0xFFE1306C),
+                    onTap: () => _launchShare('https://www.instagram.com/', shareText),
+                  ),
+                  _shareIcon(
+                    icon: Icons.tiktok,
+                    label: 'TikTok',
+                    color: Colors.black,
+                    onTap: () => _launchShare('https://www.tiktok.com/', shareText),
+                  ),
+                  _shareIcon(
+                    icon: Icons.chat,
+                    label: 'Messenger',
+                    color: const Color(0xFF0084FF),
+                    onTap: () => _launchShare('https://m.me/', shareText),
+                  ),
+                  _shareIcon(
+                    icon: Icons.email,
+                    label: 'Gmail',
+                    color: const Color(0xFFEA4335),
+                    onTap: () => _launchShare(
+                      'mailto:?subject=BusApp&body=${Uri.encodeComponent(shareText)}',
+                      shareText,
+                    ),
+                  ),
+                  _shareIcon(
+                    icon: Icons.facebook,
+                    label: 'Facebook',
+                    color: const Color(0xFF1877F2),
+                    onTap: () => _launchShare(
+                      'https://www.facebook.com/sharer/sharer.php?quote=${Uri.encodeComponent(shareText)}',
+                      shareText,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _shareIcon({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: Colors.white, size: 24),
+          ),
+          const SizedBox(height: 6),
+          Text(label, style: const TextStyle(fontSize: 10)),
+        ],
+      ),
+    );
+  }
+
+  void _launchShare(String url, String text) async {
+    Navigator.pop(context);
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {}
   }
 
   // ── Comment section ──

@@ -800,6 +800,134 @@ app.post('/api/admins', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  CHAT API
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Chat Schema ──
+const messageSchema = new mongoose.Schema({
+  conversationId: { type: String, required: true },
+  senderId:       { type: String, required: true },
+  senderName:     { type: String, default: '' },
+  text:           { type: String, default: '' },
+  imageUrl:       { type: String, default: '' },
+  isRead:         { type: Boolean, default: false },
+  createdAt:      { type: Date, default: Date.now },
+});
+
+const Message = mongoose.model('Message', messageSchema);
+
+const conversationSchema = new mongoose.Schema({
+  participants:   { type: [String], required: true },  // [userId1, userId2]
+  participantNames: { type: [String], default: [] },   // [name1, name2]
+  lastMessage:    { type: String, default: '' },
+  lastMessageAt:  { type: Date, default: Date.now },
+  unreadCount:    { type: Object, default: {} },       // { userId: count }
+}, { timestamps: true });
+
+const Conversation = mongoose.model('Conversation', conversationSchema);
+
+// ── GET /api/chat/users — Чатлах боломжтой хэрэглэгчид ──
+app.get('/api/chat/users', async (req, res) => {
+  try {
+    const users = await User.find().select('lastName firstName phone').sort({ createdAt: -1 });
+    const userList = users.map(u => ({
+      _id: u._id,
+      name: `${u.lastName} ${u.firstName}`,
+      phone: u.phone,
+    }));
+    res.json(userList);
+  } catch (err) {
+    res.status(500).json({ message: 'Серверийн алдаа' });
+  }
+});
+
+// ── POST /api/chat/conversations — Шинэ яриа эхлүүлэх эсвэл байгааг олох ──
+app.post('/api/chat/conversations', async (req, res) => {
+  try {
+    const { userId1, userName1, userId2, userName2 } = req.body;
+
+    // Аль хэдийн яриа байгаа эсэх
+    let conversation = await Conversation.findOne({
+      participants: { $all: [userId1, userId2] },
+    });
+
+    if (!conversation) {
+      conversation = await Conversation.create({
+        participants: [userId1, userId2],
+        participantNames: [userName1, userName2],
+      });
+    }
+
+    res.json(conversation);
+  } catch (err) {
+    res.status(500).json({ message: 'Серверийн алдаа' });
+  }
+});
+
+// ── GET /api/chat/conversations/:userId — Хэрэглэгчийн бүх яриа ──
+app.get('/api/chat/conversations/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const conversations = await Conversation.find({
+      participants: userId,
+    }).sort({ lastMessageAt: -1 });
+    res.json(conversations);
+  } catch (err) {
+    res.status(500).json({ message: 'Серверийн алдаа' });
+  }
+});
+
+// ── GET /api/chat/messages/:conversationId — Ярианы мессежүүд ──
+app.get('/api/chat/messages/:conversationId', async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const messages = await Message.find({ conversationId }).sort({ createdAt: 1 });
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ message: 'Серверийн алдаа' });
+  }
+});
+
+// ── POST /api/chat/messages — Мессеж илгээх ──
+app.post('/api/chat/messages', async (req, res) => {
+  try {
+    const { conversationId, senderId, senderName, text, imageUrl } = req.body;
+
+    const message = await Message.create({
+      conversationId,
+      senderId,
+      senderName: senderName || '',
+      text: text || '',
+      imageUrl: imageUrl || '',
+    });
+
+    // Яриаг шинэчлэх
+    await Conversation.findByIdAndUpdate(conversationId, {
+      lastMessage: text || '📷 Зураг',
+      lastMessageAt: new Date(),
+    });
+
+    res.status(201).json(message);
+  } catch (err) {
+    res.status(500).json({ message: 'Серверийн алдаа' });
+  }
+});
+
+// ── PUT /api/chat/messages/read — Мессежүүдийг уншсан гэж тэмдэглэх ──
+app.put('/api/chat/messages/read', async (req, res) => {
+  try {
+    const { conversationId, userId } = req.body;
+    await Message.updateMany(
+      { conversationId, senderId: { $ne: userId }, isRead: false },
+      { isRead: true },
+    );
+    res.json({ message: 'ok' });
+  } catch (err) {
+    res.status(500).json({ message: 'Серверийн алдаа' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  SERVER START
 // ═══════════════════════════════════════════════════════════════════════════
 const PORT = process.env.PORT || 3000;

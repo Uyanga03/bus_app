@@ -17,6 +17,7 @@ import 'driver_post_screen.dart';
 import 'admin_panel_screen.dart';
 import 'chat_list_screen.dart';
 import 'user_profile_screen.dart';
+import 'notification_screen.dart';
 
 class FeedbackContent extends StatefulWidget {
   const FeedbackContent({super.key});
@@ -57,6 +58,7 @@ class FeedbackContentState extends State<FeedbackContent>
   String _searchQuery = '';
   bool _isMenuOpen = false;
   Uint8List? _profileImageBytes; // Профайл зураг
+  int _unreadNotifCount = 0; // Уншаагүй мэдэгдэл тоо
 
   static const List<String> _feedbackTabs = [
     'БҮГД',
@@ -121,6 +123,21 @@ class FeedbackContentState extends State<FeedbackContent>
         _profileImageBytes = base64Decode(imageBase64);
       });
     }
+    // Мэдэгдлийн тоо авах
+    _fetchUnreadCount();
+  }
+
+  Future<void> _fetchUnreadCount() async {
+    if (_currentUser == null) return;
+    try {
+      final res = await http.get(
+        Uri.parse('http://localhost:3000/api/notifications/${_currentUser!['id']}/unread-count'),
+      );
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        setState(() => _unreadNotifCount = data['count'] ?? 0);
+      }
+    } catch (_) {}
   }
 
   Future<void> _saveUser(Map<String, dynamic> user) async {
@@ -177,6 +194,7 @@ class FeedbackContentState extends State<FeedbackContent>
           isFeedbackLoading = false;
           feedbackError = null;
         });
+        _fetchUnreadCount(); // Мэдэгдлийн тоо шинэчлэх
       } else {
         setState(() {
           isFeedbackLoading = false;
@@ -279,7 +297,10 @@ class FeedbackContentState extends State<FeedbackContent>
       await http.put(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode({'userId': _currentUser!['id']}),
+        body: json.encode({
+          'userId': _currentUser!['id'],
+          'userName': _currentUser!['name'] ?? '',
+        }),
       );
       setState(() => _likedPostIds.add(id));
       fetchFeedbacks();
@@ -734,10 +755,16 @@ class FeedbackContentState extends State<FeedbackContent>
                         _menuItem(
                           icon: Icons.notifications_outlined,
                           label: 'Мэдэгдэл',
-                          badge: 3,
-                          onTap: () {
+                          badge: _unreadNotifCount > 0 ? _unreadNotifCount : null,
+                          onTap: () async {
                             setState(() => _isMenuOpen = false);
-                            // TODO: Мэдэгдэл дэлгэц
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => NotificationScreen(user: _currentUser!),
+                              ),
+                            );
+                            _fetchUnreadCount(); // Буцахад тоог шинэчлэх
                           },
                         ),
                         const Divider(height: 1, indent: 16, endIndent: 16),

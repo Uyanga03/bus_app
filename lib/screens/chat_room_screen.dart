@@ -208,10 +208,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                     ],
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.phone, color: Colors.white),
-                  onPressed: () {},
-                ),
+                const SizedBox(width: 16),
               ],
             ),
           ),

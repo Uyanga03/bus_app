@@ -164,6 +164,20 @@ adminSchema.methods.matchPassword = async function (entered) {
 
 const Admin = mongoose.model('Admin', adminSchema);
 
+// ── Notification Schema ──
+const notificationSchema = new mongoose.Schema({
+  userId:    { type: String, required: true },
+  fromUser:  { type: String, default: '' },
+  fromName:  { type: String, default: '' },
+  type:      { type: String, required: true },
+  message:   { type: String, default: '' },
+  postId:    { type: String, default: '' },
+  isRead:    { type: Boolean, default: false },
+  createdAt: { type: Date, default: Date.now },
+});
+
+const Notification = mongoose.model('Notification', notificationSchema);
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  UTILS
 // ═══════════════════════════════════════════════════════════════════════════
@@ -298,6 +312,21 @@ app.put('/api/feedback/:id/like', async (req, res) => {
     feedback.likes += 1;
     if (userId) feedback.likedBy.push(userId);
     await feedback.save();
+
+    // Мэдэгдэл үүсгэх (постын эзэнд)
+    if (feedback.userId && feedback.userId !== userId) {
+      try {
+        await Notification.create({
+          userId: feedback.userId,
+          fromUser: userId,
+          fromName: req.body.userName || '',
+          type: 'like',
+          message: `${req.body.userName || 'Хэрэглэгч'} таны постонд зүрх дарлаа ❤️`,
+          postId: feedback._id,
+        });
+      } catch (_) {}
+    }
+
     res.json(feedback);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -319,6 +348,21 @@ app.post('/api/feedback/:id/comment', async (req, res) => {
     });
     feedback.comments = feedback.commentsList.length;
     await feedback.save();
+
+    // Мэдэгдэл үүсгэх (постын эзэнд)
+    if (feedback.userId && feedback.userId !== userId) {
+      try {
+        await Notification.create({
+          userId: feedback.userId,
+          fromUser: userId || '',
+          fromName: userName || '',
+          type: 'comment',
+          message: `${userName || 'Хэрэглэгч'} сэтгэгдэл бичлээ: "${message.substring(0, 50)}"`,
+          postId: feedback._id,
+        });
+      } catch (_) {}
+    }
+
     res.json(feedback);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -907,6 +951,24 @@ app.post('/api/chat/messages', async (req, res) => {
       lastMessageAt: new Date(),
     });
 
+    // Нөгөө хэрэглэгчид мэдэгдэл илгээх
+    try {
+      const conv = await Conversation.findById(conversationId);
+      if (conv) {
+        const otherUserId = conv.participants.find(p => p !== senderId);
+        if (otherUserId) {
+          await Notification.create({
+            userId: otherUserId,
+            fromUser: senderId,
+            fromName: senderName || '',
+            type: 'chat',
+            message: `${senderName || 'Хэрэглэгч'}: ${text || '📷 Зураг'}`,
+            postId: conversationId,
+          });
+        }
+      }
+    } catch (_) {}
+
     res.status(201).json(message);
   } catch (err) {
     res.status(500).json({ message: 'Серверийн алдаа' });
@@ -920,6 +982,45 @@ app.put('/api/chat/messages/read', async (req, res) => {
     await Message.updateMany(
       { conversationId, senderId: { $ne: userId }, isRead: false },
       { isRead: true },
+    );
+    res.json({ message: 'ok' });
+  } catch (err) {
+    res.status(500).json({ message: 'Серверийн алдаа' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  NOTIFICATION API
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── GET /api/notifications/:userId ──
+app.get('/api/notifications/:userId', async (req, res) => {
+  try {
+    const notifications = await Notification.find({ userId: req.params.userId })
+      .sort({ createdAt: -1 }).limit(50);
+    res.json(notifications);
+  } catch (err) {
+    res.status(500).json({ message: 'Серверийн алдаа' });
+  }
+});
+
+// ── GET /api/notifications/:userId/unread-count ──
+app.get('/api/notifications/:userId/unread-count', async (req, res) => {
+  try {
+    const count = await Notification.countDocuments({
+      userId: req.params.userId, isRead: false,
+    });
+    res.json({ count });
+  } catch (err) {
+    res.status(500).json({ message: 'Серверийн алдаа' });
+  }
+});
+
+// ── PUT /api/notifications/:userId/read-all ──
+app.put('/api/notifications/:userId/read-all', async (req, res) => {
+  try {
+    await Notification.updateMany(
+      { userId: req.params.userId, isRead: false }, { isRead: true },
     );
     res.json({ message: 'ok' });
   } catch (err) {

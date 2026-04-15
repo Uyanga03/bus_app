@@ -27,6 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _confirmPasswordController =
       TextEditingController();
   int _forgotStep = 1; // 1: утас оруулах, 2: код оруулах, 3: шинэ нууц үг
+  int _adminTapCount = 0; // Админ нууц нэвтрэлт (AppBar дээр 5 удаа дарах)
 
   static const _orange = Color(0xFFF57C00);
   static const _orangeLight = Color(0xFFFFF3E0);
@@ -211,6 +212,128 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  //  Админ нууц нэвтрэлт (AppBar дээр 5 удаа дарахад гарна)
+  // ═══════════════════════════════════════════════════════════════════
+  void _showAdminLoginDialog() {
+    final phoneCtrl = TextEditingController();
+    final passCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        bool loading = false;
+        bool obscure = true;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              title: Row(
+                children: [
+                  Icon(Icons.admin_panel_settings, color: _orange, size: 24),
+                  const SizedBox(width: 8),
+                  const Text('Админ нэвтрэх', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      labelText: 'Утас',
+                      prefixIcon: Icon(Icons.phone, color: Colors.grey.shade400, size: 20),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: _orange),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: passCtrl,
+                    obscureText: obscure,
+                    decoration: InputDecoration(
+                      labelText: 'Нууц үг',
+                      prefixIcon: Icon(Icons.lock, color: Colors.grey.shade400, size: 20),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscure ? Icons.visibility_off : Icons.visibility, size: 20),
+                        onPressed: () => setDialogState(() => obscure = !obscure),
+                      ),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: _orange),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text('Болих', style: TextStyle(color: Colors.grey.shade600)),
+                ),
+                ElevatedButton(
+                  onPressed: loading ? null : () async {
+                    final phone = phoneCtrl.text.trim();
+                    final pass = passCtrl.text.trim();
+                    if (phone.isEmpty || pass.isEmpty) {
+                      _showSnackBar('Утас болон нууц үгээ оруулна уу');
+                      return;
+                    }
+                    setDialogState(() => loading = true);
+                    try {
+                      final response = await http.post(
+                        Uri.parse('http://localhost:3000/api/auth/login'),
+                        headers: {'Content-Type': 'application/json'},
+                        body: json.encode({
+                          'phone': phone,
+                          'password': pass,
+                          'role': 'Админ',
+                        }),
+                      );
+                      if (response.statusCode == 200) {
+                        final data = json.decode(response.body);
+                        Navigator.pop(ctx);
+                        if (mounted) {
+                          Navigator.pop(context, {
+                            'name': data['user']?['name'] ?? 'Админ',
+                            'id': data['user']?['_id'] ?? '',
+                            'phone': phone,
+                            'role': 'Админ',
+                          });
+                        }
+                      } else {
+                        final data = json.decode(response.body);
+                        _showSnackBar(data['message'] ?? 'Нэвтрэх амжилтгүй');
+                      }
+                    } catch (e) {
+                      _showSnackBar('Сүлжээний алдаа');
+                    }
+                    setDialogState(() => loading = false);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _orange,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: loading
+                      ? const SizedBox(width: 18, height: 18,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('Нэвтрэх'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showSnackBar(String msg, {bool isError = true}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -250,6 +373,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 Navigator.pop(context);
               }
             },
+            onTitleTap: () {
+              if (!_showForgotPassword) {
+                _adminTapCount++;
+                if (_adminTapCount >= 5) {
+                  _adminTapCount = 0;
+                  _showAdminLoginDialog();
+                }
+              }
+            },
           ),
 
           // ── Body ──
@@ -275,7 +407,7 @@ class _LoginScreenState extends State<LoginScreen> {
       children: [
         // ── Роль сонголт ──
         Row(
-          children: ['Жолооч', 'Зорчигч', 'Админ'].map((role) {
+          children: ['Жолооч', 'Зорчигч'].map((role) {
             final isSelected = _selectedRole == role;
             return Padding(
               padding: const EdgeInsets.only(right: 16),
@@ -446,6 +578,19 @@ class _LoginScreenState extends State<LoginScreen> {
                 color: Colors.grey.shade500,
                 fontSize: 13,
               ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 30),
+
+        // ── Админ нэвтрэх (бүдэг icon) ──
+        Center(
+          child: GestureDetector(
+            onTap: () => _showAdminLoginDialog(),
+            child: Icon(
+              Icons.shield_outlined,
+              size: 18,
+              color: Colors.grey.shade300,
             ),
           ),
         ),
@@ -635,6 +780,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildAppBar({
     required String title,
     required VoidCallback onBack,
+    VoidCallback? onTitleTap,
   }) {
     return Container(
       width: double.infinity,
@@ -652,12 +798,15 @@ class _LoginScreenState extends State<LoginScreen> {
             onPressed: onBack,
           ),
           Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
+            child: GestureDetector(
+              onTap: onTitleTap,
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
               ),
             ),
           ),

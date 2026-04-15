@@ -56,6 +56,7 @@ class FeedbackContentState extends State<FeedbackContent>
   // ═══════════════════════════════════════════════════════════════════
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  String _selectedCategory = ''; // Ангилал шүүлтүүр
   bool _isMenuOpen = false;
   Uint8List? _profileImageBytes; // Профайл зураг
   int _unreadNotifCount = 0; // Уншаагүй мэдэгдэл тоо
@@ -168,8 +169,18 @@ class FeedbackContentState extends State<FeedbackContent>
 
     String url = "http://localhost:3000/api/feedback";
     final tabIndex = _tabController?.index ?? 0;
+
+    // URL параметрууд бэлдэх
+    final params = <String, String>{};
     if (tabIndex > 0 && _tabTypeMap.containsKey(tabIndex)) {
-      url += "?type=${_tabTypeMap[tabIndex]}";
+      params['type'] = _tabTypeMap[tabIndex]!;
+    }
+    // Нэвтэрсэн хэрэглэгчийн userId илгээх (өөрийн pending постууд харагдана)
+    if (_currentUser != null) {
+      params['userId'] = _currentUser!['id'] ?? '';
+    }
+    if (params.isNotEmpty) {
+      url += '?${params.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}';
     }
 
     try {
@@ -210,7 +221,7 @@ class FeedbackContentState extends State<FeedbackContent>
   }
 
   // ── Post илгээх ──
-  Future<void> submitFeedback(String type, {bool anonymous = true}) async {
+  Future<void> submitFeedback(String type, {bool anonymous = true, String category = ''}) async {
     if (_messageController.text.trim().isEmpty && _selectedMedia.isEmpty) {
       return;
     }
@@ -230,6 +241,7 @@ class FeedbackContentState extends State<FeedbackContent>
         request.fields['message'] = _messageController.text.trim();
         request.fields['busNumber'] = _busController.text.trim();
         request.fields['userName'] = userName;
+        if (category.isNotEmpty) request.fields['category'] = category;
         if (_currentUser != null) {
           request.fields['userId'] = _currentUser!['id'] ?? '';
         }
@@ -252,6 +264,7 @@ class FeedbackContentState extends State<FeedbackContent>
             'message': _messageController.text.trim(),
             'busNumber': _busController.text.trim(),
             'userName': userName,
+            if (category.isNotEmpty) 'category': category,
             if (_currentUser != null) 'userId': _currentUser!['id'] ?? '',
           }),
         );
@@ -440,18 +453,34 @@ class FeedbackContentState extends State<FeedbackContent>
   //  ШИНЭ: Хайлтын шүүлтүүр (локал)
   // ═══════════════════════════════════════════════════════════════════
   List<dynamic> get _filteredFeedbacks {
-    if (_searchQuery.isEmpty) return feedbacks;
-    final q = _searchQuery.toLowerCase();
-    return feedbacks.where((item) {
-      final message = (item['message']?.toString() ?? '').toLowerCase();
-      final userName = (item['userName']?.toString() ?? '').toLowerCase();
-      final busNumber = (item['busNumber']?.toString() ?? '').toLowerCase();
-      final type = (item['type']?.toString() ?? '').toLowerCase();
-      return message.contains(q) ||
-          userName.contains(q) ||
-          busNumber.contains(q) ||
-          type.contains(q);
-    }).toList();
+    var list = feedbacks.toList();
+
+    // Ангилал шүүлтүүр (алдсан/олдсон постод)
+    if (_selectedCategory.isNotEmpty) {
+      list = list.where((item) {
+        final cat = (item['category']?.toString() ?? '').toLowerCase();
+        return cat == _selectedCategory.toLowerCase();
+      }).toList();
+    }
+
+    // Текст хайлт
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      list = list.where((item) {
+        final message = (item['message']?.toString() ?? '').toLowerCase();
+        final userName = (item['userName']?.toString() ?? '').toLowerCase();
+        final busNumber = (item['busNumber']?.toString() ?? '').toLowerCase();
+        final type = (item['type']?.toString() ?? '').toLowerCase();
+        final category = (item['category']?.toString() ?? '').toLowerCase();
+        return message.contains(q) ||
+            userName.contains(q) ||
+            busNumber.contains(q) ||
+            type.contains(q) ||
+            category.contains(q);
+      }).toList();
+    }
+
+    return list;
   }
 
   // =====================================================================
@@ -561,6 +590,28 @@ class FeedbackContentState extends State<FeedbackContent>
                 tabs: _feedbackTabs.map((t) => Tab(text: t)).toList(),
               ),
             ),
+
+            // ── Ангилал шүүлтүүр (АЛДСАН/ОЛДСОН таб дээр л харагдана) ──
+            if (_tabController != null &&
+                (_tabController!.index == 3 || _tabController!.index == 4))
+              Container(
+                height: 40,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    _categoryChip('Бүгд', ''),
+                    _categoryChip('Цахилгаан эд зүйл', 'Цахилгаан эд зүйл'),
+                    _categoryChip('Цүнх', 'Цүнх'),
+                    _categoryChip('Түлхүүр', 'Түлхүүр'),
+                    _categoryChip('Бичиг баримт', 'Бичиг баримт'),
+                    _categoryChip('Түрийвч', 'Түрийвч'),
+                    _categoryChip('Хувцас', 'Хувцас'),
+                    _categoryChip('Бусад эд зүйл', 'Бусад эд зүйл'),
+                  ],
+                ),
+              ),
+
             Expanded(child: _buildFeedbackBody()),
           ],
         ),
@@ -917,6 +968,37 @@ class FeedbackContentState extends State<FeedbackContent>
   }
 
   // ── Body ──
+  // ── Ангилал chip ──
+  Widget _categoryChip(String label, String value) {
+    final isActive = _selectedCategory == value;
+    return Padding(
+      padding: const EdgeInsets.only(right: 6, top: 4, bottom: 4),
+      child: GestureDetector(
+        onTap: () => setState(() {
+          _selectedCategory = value;
+        }),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isActive ? const Color(0xFFF57C00) : const Color(0xFFF5F5F5),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isActive ? const Color(0xFFF57C00) : Colors.grey.shade300,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+              color: isActive ? Colors.white : Colors.grey.shade700,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFeedbackBody() {
     if (isFeedbackLoading) {
       return const Center(
@@ -1013,6 +1095,7 @@ class FeedbackContentState extends State<FeedbackContent>
     final isCommentOpen = _expandedCommentId == id;
     final bool hasLiked = _likedPostIds.contains(id);
     final postUserId = item['userId']?.toString() ?? '';
+    final postCategory = item['category']?.toString() ?? '';
 
     // Өөрийн пост мөн эсэх шалгах
     final bool isMyPost = _currentUser != null &&
@@ -1114,6 +1197,22 @@ class FeedbackContentState extends State<FeedbackContent>
                                   color: _typeColor(type),
                                   fontWeight: FontWeight.w600)),
                         ),
+                        if (postCategory.isNotEmpty) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF57C00).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(postCategory,
+                                style: const TextStyle(
+                                    fontSize: 9,
+                                    color: Color(0xFFF57C00),
+                                    fontWeight: FontWeight.w600)),
+                          ),
+                        ],
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(timeAgo,
@@ -1599,6 +1698,7 @@ class FeedbackContentState extends State<FeedbackContent>
   // =====================================================================
   void _showAddDialog() {
     String selectedType = 'санал';
+    String selectedCategory = '';
     bool isAnonymous = _currentUser == null;
     _selectedMedia = [];
 
@@ -1718,6 +1818,51 @@ class FeedbackContentState extends State<FeedbackContent>
                     ),
                     const SizedBox(height: 16),
 
+                    // ── Ангилал (алдсан/олдсон үед) ──
+                    if (selectedType == 'алдсан' || selectedType == 'олдсон') ...[
+                      const Text('Ангилал:',
+                          style: TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          'Цахилгаан эд зүйл',
+                          'Цүнх',
+                          'Түлхүүр',
+                          'Бичиг баримт',
+                          'Түрийвч',
+                          'Хувцас',
+                          'Бусад эд зүйл',
+                        ].map((c) {
+                          final sel = selectedCategory == c;
+                          return GestureDetector(
+                            onTap: () =>
+                                setModalState(() => selectedCategory = c),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: sel
+                                    ? const Color(0xFFF57C00)
+                                    : Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Text(c,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color:
+                                        sel ? Colors.white : Colors.black87,
+                                    fontWeight: FontWeight.w500,
+                                  )),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
                     // ── Автобусны дугаар ──
                     _inputField(
                         _busController, 'Автобусны чиглэлийн дугаар'),
@@ -1825,7 +1970,8 @@ class FeedbackContentState extends State<FeedbackContent>
                           height: 44,
                           child: ElevatedButton.icon(
                             onPressed: () => submitFeedback(selectedType,
-                                anonymous: isAnonymous),
+                                anonymous: isAnonymous,
+                                category: selectedCategory),
                             icon: const Icon(Icons.send, size: 18),
                             label: const Text('Нийтлэх',
                                 style: TextStyle(

@@ -71,6 +71,7 @@ const feedbackSchema = new mongoose.Schema({
   type:         { type: String, required: true },
   message:      { type: String, default: '' },
   busNumber:    { type: String, default: '' },
+  category:     { type: String, default: '' },  // Ангилал: Цахилгаан эд зүйл, Цүнх, Түлхүүр, ...
   userName:     { type: String, default: 'Зочин' },
   userId:       { type: String, default: '' },          // ШИНЭ
   likes:        { type: Number, default: 0 },
@@ -79,6 +80,19 @@ const feedbackSchema = new mongoose.Schema({
   commentsList: { type: [commentSchema], default: [] }, // ШИНЭ
   mediaUrls:    { type: [String], default: [] },        // ШИНЭ
   image:        { type: String, default: '' },          // Хуучин field хэвээр
+  status:       { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+  resolved:     { type: Boolean, default: false },  // Алдсан→олдсон, Санал/Гомдол→шийдвэрлэгдсэн
+  resolvedAt:   { type: Date, default: null },
+  approvedBy:   { type: String, default: '' },
+  approvedAt:   { type: Date, default: null },
+  // ── Хадгалах хугацааны систем (олдсон/алдсан эд зүйлд) ──
+  storagePhase: { type: String, enum: ['station', 'police', 'returned', 'expired'], default: 'station' },
+  stationDeadline: { type: Date, default: null },
+  policeDeadline:  { type: Date, default: null },
+  transferredAt:   { type: Date, default: null },
+  returnedAt:      { type: Date, default: null },
+  isDeleted:       { type: Boolean, default: false },
+  deletedAt:       { type: Date, default: null },
   createdAt:    { type: Date, default: Date.now },
 });
 
@@ -254,16 +268,39 @@ app.delete('/api/routes/:id', async (req, res) => {
 //  FEEDBACK API (ШИНЭЧЛЭГДСЭН — Flutter кодтой 100% таарна)
 // ═══════════════════════════════════════════════════════════════════════════
 
-// ── GET /api/feedback  |  GET /api/feedback?type=гомдол ──
-// Flutter уншдаг: _id, type, message, userName, busNumber, likes,
-//   likedBy, comments, commentsList, createdAt, mediaUrls
+// ── GET /api/feedback — Энгийн хэрэглэгч: зөвхөн approved + устгаагүй ──
 app.get('/api/feedback', async (req, res) => {
   try {
-    const filter = {};
+    const filter = { status: 'approved', isDeleted: { $ne: true } };
     if (req.query.type) {
       filter.type = req.query.type;
     }
+    if (req.query.category) {
+      filter.category = req.query.category;
+    }
+    if (req.query.userId) {
+      const ownPosts = await Feedback.find({ userId: req.query.userId, isDeleted: { $ne: true } }).sort({ createdAt: -1 });
+      const approvedPosts = await Feedback.find(filter).sort({ createdAt: -1 });
+      const allIds = new Set();
+      const merged = [];
+      for (const p of [...ownPosts, ...approvedPosts]) {
+        const id = p._id.toString();
+        if (!allIds.has(id)) { allIds.add(id); merged.push(p); }
+      }
+      merged.sort((a, b) => b.createdAt - a.createdAt);
+      return res.json(merged);
+    }
     const feedbacks = await Feedback.find(filter).sort({ createdAt: -1 });
+    res.json(feedbacks);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/feedback/admin — Админ: бүх постууд (устгасан ч орно) ──
+app.get('/api/feedback/admin', async (req, res) => {
+  try {
+    const feedbacks = await Feedback.find().sort({ createdAt: -1 });
     res.json(feedbacks);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -369,15 +406,252 @@ app.post('/api/feedback/:id/comment', async (req, res) => {
   }
 });
 
-// ── DELETE /api/feedback/:id (ХУУЧНААР) ──
+// ── DELETE /api/feedback/:id — Зөөлөн устгах (20 хоног хадгална) ──
 app.delete('/api/feedback/:id', async (req, res) => {
   try {
-    await Feedback.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Deleted' });
+    const feedback = await Feedback.findById(req.params.id);
+    if (!feedback) return res.status(404).json({ error: 'Олдсонгүй' });
+    feedback.isDeleted = true;
+    feedback.deletedAt = new Date();
+    await feedback.save();
+    res.json({ message: 'Устгагдлаа (20 хоног хадгалагдана)' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ── PUT /api/feedback/:id/restore — Устгасан постыг сэргээх ──
+app.put('/api/feedback/:id/restore', async (req, res) => {
+  try {
+    const feedback = await Feedback.findById(req.params.id);
+    if (!feedback) return res.status(404).json({ error: 'Олдсонгүй' });
+    feedback.isDeleted = false;
+    feedback.deletedAt = null;
+    await feedback.save();
+    res.json({ message: 'Сэргээгдлээ', feedback });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PUT /api/feedback/:id/approve — Пост баталгаажуулах ──
+app.put('/api/feedback/:id/approve', async (req, res) => {
+  try {
+    const { adminId, adminName } = req.body;
+    const feedback = await Feedback.findById(req.params.id);
+    if (!feedback) return res.status(404).json({ error: 'Пост олдсонгүй' });
+
+    feedback.status = 'approved';
+    feedback.approvedBy = adminName || adminId || '';
+    feedback.approvedAt = new Date();
+
+    // Олдсон/Алдсан эд зүйлд хадгалах хугацаа тохируулах
+    if (feedback.type === 'олдсон' || feedback.type === 'алдсан') {
+      feedback.storagePhase = 'station';
+      const now = new Date();
+      feedback.stationDeadline = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 хоног
+      feedback.policeDeadline = new Date(now.getTime() + 6 * 30 * 24 * 60 * 60 * 1000); // 6 сар
+    }
+
+    await feedback.save();
+
+    // Постын эзэнд мэдэгдэл илгээх
+    if (feedback.userId) {
+      try {
+        await Notification.create({
+          userId: feedback.userId,
+          fromUser: adminId || '',
+          fromName: adminName || 'Админ',
+          type: 'approve',
+          message: 'Таны пост баталгаажлаа ✅',
+          postId: feedback._id,
+        });
+      } catch (_) {}
+    }
+
+    res.json({ message: 'Баталгаажуулагдлаа', feedback });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PUT /api/feedback/:id/reject — Пост цуцлах ──
+app.put('/api/feedback/:id/reject', async (req, res) => {
+  try {
+    const { adminId, adminName, reason } = req.body;
+    const feedback = await Feedback.findById(req.params.id);
+    if (!feedback) return res.status(404).json({ error: 'Пост олдсонгүй' });
+
+    feedback.status = 'rejected';
+    await feedback.save();
+
+    // Постын эзэнд мэдэгдэл илгээх
+    if (feedback.userId) {
+      try {
+        await Notification.create({
+          userId: feedback.userId,
+          fromUser: adminId || '',
+          fromName: adminName || 'Админ',
+          type: 'reject',
+          message: `Таны пост цуцлагдлаа ❌${reason ? ': ' + reason : ''}`,
+          postId: feedback._id,
+        });
+      } catch (_) {}
+    }
+
+    res.json({ message: 'Цуцлагдлаа', feedback });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PUT /api/feedback/:id/resolve — Пост шийдвэрлэгдсэн/олдсон болгох ──
+app.put('/api/feedback/:id/resolve', async (req, res) => {
+  try {
+    const { resolved } = req.body;
+    const feedback = await Feedback.findById(req.params.id);
+    if (!feedback) return res.status(404).json({ error: 'Пост олдсонгүй' });
+
+    feedback.resolved = resolved !== false;
+    feedback.resolvedAt = feedback.resolved ? new Date() : null;
+    await feedback.save();
+
+    // Постын эзэнд мэдэгдэл
+    if (feedback.userId) {
+      const isLost = feedback.type === 'алдсан';
+      const msg = feedback.resolved
+        ? (isLost ? 'Таны алдсан зүйл олдлоо! 🟢' : 'Таны санал хүсэлт шийдвэрлэгдлээ ✅')
+        : (isLost ? 'Таны алдсан зүйл олдоогүй байна 🔴' : 'Таны санал хүсэлт шийдвэрлэгдээгүй');
+      try {
+        await Notification.create({
+          userId: feedback.userId,
+          type: 'resolve',
+          message: msg,
+          postId: feedback._id,
+        });
+      } catch (_) {}
+    }
+
+    res.json({ message: 'Шинэчлэгдлээ', feedback });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PUT /api/feedback/:id/storage — Хадгалах шатыг өөрчлөх ──
+app.put('/api/feedback/:id/storage', async (req, res) => {
+  try {
+    const { phase } = req.body; // 'station', 'police', 'returned', 'expired'
+    const feedback = await Feedback.findById(req.params.id);
+    if (!feedback) return res.status(404).json({ error: 'Пост олдсонгүй' });
+
+    feedback.storagePhase = phase;
+
+    if (phase === 'police') {
+      feedback.transferredAt = new Date();
+    } else if (phase === 'returned') {
+      feedback.returnedAt = new Date();
+      feedback.resolved = true;
+      feedback.resolvedAt = new Date();
+    }
+
+    await feedback.save();
+
+    // Мэдэгдэл илгээх
+    if (feedback.userId) {
+      let msg = '';
+      if (phase === 'police') msg = 'Таны олдсон зүйл цагдаад шилжүүлэгдлээ 🔵 (6 сар хадгална)';
+      else if (phase === 'returned') msg = 'Эд зүйл эзэнд нь буцаагдлаа ✅';
+      else if (phase === 'expired') msg = 'Хадгалах хугацаа дууссан ⚠️';
+
+      if (msg) {
+        try {
+          await Notification.create({
+            userId: feedback.userId,
+            type: 'storage',
+            message: msg,
+            postId: feedback._id,
+          });
+        } catch (_) {}
+      }
+    }
+
+    res.json({ message: 'Шинэчлэгдлээ', feedback });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Автомат хугацаа шалгах (сервер эхлэхэд 1 цагт нэг удаа) ──
+async function checkStorageDeadlines() {
+  try {
+    const now = new Date();
+
+    // Станцын хугацаа дууссан → Цагдаад шилжүүлэх
+    const stationExpired = await Feedback.find({
+      storagePhase: 'station',
+      stationDeadline: { $lte: now },
+      resolved: false,
+    });
+    for (const fb of stationExpired) {
+      fb.storagePhase = 'police';
+      fb.transferredAt = now;
+      await fb.save();
+      if (fb.userId) {
+        try {
+          await Notification.create({
+            userId: fb.userId,
+            type: 'storage',
+            message: '7 хоног дууслаа. Эд зүйл цагдаад шилжүүлэгдлээ 🔵',
+            postId: fb._id,
+          });
+        } catch (_) {}
+      }
+    }
+
+    // Цагдаагийн хугацаа дууссан → Хугацаа дууссан
+    const policeExpired = await Feedback.find({
+      storagePhase: 'police',
+      policeDeadline: { $lte: now },
+      resolved: false,
+    });
+    for (const fb of policeExpired) {
+      fb.storagePhase = 'expired';
+      await fb.save();
+      if (fb.userId) {
+        try {
+          await Notification.create({
+            userId: fb.userId,
+            type: 'storage',
+            message: '6 сарын хадгалах хугацаа дууслаа ⚠️',
+            postId: fb._id,
+          });
+        } catch (_) {}
+      }
+    }
+
+    if (stationExpired.length || policeExpired.length) {
+      console.log(`[Storage Check] Station→Police: ${stationExpired.length}, Police→Expired: ${policeExpired.length}`);
+    }
+
+    // 20 хоног өнгөрсөн устгасан постуудыг бүрмөсөн устгах
+    const twentyDaysAgo = new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000);
+    const permanentlyDeleted = await Feedback.deleteMany({
+      isDeleted: true,
+      deletedAt: { $lte: twentyDaysAgo },
+    });
+    if (permanentlyDeleted.deletedCount > 0) {
+      console.log(`[Cleanup] ${permanentlyDeleted.deletedCount} пост бүрмөсөн устгагдлаа (20+ хоног)`);
+    }
+  } catch (err) {
+    console.error('Storage check error:', err);
+  }
+}
+
+// 1 цаг тутамд хугацаа шалгах
+setInterval(checkStorageDeadlines, 60 * 60 * 1000);
+// Сервер эхлэхэд 1 удаа шалгах
+setTimeout(checkStorageDeadlines, 5000);
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  ШИНЭ: AUTH API — login_screen.dart + register_screen.dart -тай таарна

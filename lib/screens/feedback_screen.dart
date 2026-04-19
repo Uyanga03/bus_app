@@ -170,17 +170,8 @@ class FeedbackContentState extends State<FeedbackContent>
     String url = "http://localhost:3000/api/feedback";
     final tabIndex = _tabController?.index ?? 0;
 
-    // URL параметрууд бэлдэх
-    final params = <String, String>{};
     if (tabIndex > 0 && _tabTypeMap.containsKey(tabIndex)) {
-      params['type'] = _tabTypeMap[tabIndex]!;
-    }
-    // Нэвтэрсэн хэрэглэгчийн userId илгээх (өөрийн pending постууд харагдана)
-    if (_currentUser != null) {
-      params['userId'] = _currentUser!['id'] ?? '';
-    }
-    if (params.isNotEmpty) {
-      url += '?${params.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&')}';
+      url += "?type=${_tabTypeMap[tabIndex]}";
     }
 
     try {
@@ -201,7 +192,27 @@ class FeedbackContentState extends State<FeedbackContent>
         }
 
         setState(() {
-          feedbacks = data;
+          // Жолооч бол өөрийн чиглэлийн постуудыг эхэнд гаргах
+          if (_currentUser != null && _currentUser!['role'] == 'Жолооч') {
+            final myRoute = _currentUser!['busRoute']?.toString() ?? '';
+            if (myRoute.isNotEmpty) {
+              final myRoutePosts = <dynamic>[];
+              final otherPosts = <dynamic>[];
+              for (final item in data) {
+                final busNumber = item['busNumber']?.toString() ?? '';
+                if (busNumber == myRoute) {
+                  myRoutePosts.add(item);
+                } else {
+                  otherPosts.add(item);
+                }
+              }
+              feedbacks = [...myRoutePosts, ...otherPosts];
+            } else {
+              feedbacks = data;
+            }
+          } else {
+            feedbacks = data;
+          }
           isFeedbackLoading = false;
           feedbackError = null;
         });
@@ -591,9 +602,8 @@ class FeedbackContentState extends State<FeedbackContent>
               ),
             ),
 
-            // ── Ангилал шүүлтүүр (АЛДСАН/ОЛДСОН таб дээр л харагдана) ──
-            if (_tabController != null &&
-                (_tabController!.index == 3 || _tabController!.index == 4))
+            // ── Ангилал шүүлтүүр (ОЛДСОН таб дээр л харагдана) ──
+            if (_tabController != null && _tabController!.index == 3)
               Container(
                 height: 40,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -770,7 +780,7 @@ class FeedbackContentState extends State<FeedbackContent>
                         if (_currentUser!['role'] == 'Админ')
                           _menuItem(
                             icon: Icons.manage_search,
-                            label: 'Олдсон эд зүйлсийн удирдлага',
+                            label: 'Нийтлэлийн удирдлага',
                             onTap: () {
                               setState(() => _isMenuOpen = false);
                               Navigator.push(
@@ -1818,8 +1828,8 @@ class FeedbackContentState extends State<FeedbackContent>
                     ),
                     const SizedBox(height: 16),
 
-                    // ── Ангилал (алдсан/олдсон үед) ──
-                    if (selectedType == 'алдсан' || selectedType == 'олдсон') ...[
+                    // ── Ангилал (олдсон үед) ──
+                    if (selectedType == 'олдсон') ...[
                       const Text('Ангилал:',
                           style: TextStyle(
                               fontSize: 13, fontWeight: FontWeight.w500)),
@@ -1863,9 +1873,38 @@ class FeedbackContentState extends State<FeedbackContent>
                       const SizedBox(height: 16),
                     ],
 
-                    // ── Автобусны дугаар ──
-                    _inputField(
-                        _busController, 'Автобусны чиглэлийн дугаар'),
+                    // ── Автобусны чиглэлийн дугаар ──
+                    const Text('Автобусны чиглэлийн дугаар',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 4),
+                    Text('Жишээ нь: 19А, 42, 7Б',
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _busController,
+                      maxLength: 3,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: InputDecoration(
+                        hintText: '19А',
+                        hintStyle: const TextStyle(fontSize: 14, color: Color(0xFFBBBBBB)),
+                        counterText: '',
+                        filled: true,
+                        fillColor: const Color(0xFFFAFAFA),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: Color(0xFFF57C00)),
+                        ),
+                      ),
+                    ),
                     const SizedBox(height: 10),
 
                     // ── Мессеж ──

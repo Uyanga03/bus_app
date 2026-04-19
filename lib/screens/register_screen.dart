@@ -51,6 +51,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _showSnackBar('Утасны дугаараа оруулна уу');
       return;
     }
+    if (phone.length != 8 || int.tryParse(phone) == null) {
+      _showSnackBar('Утасны дугаар 8 оронтой тоо байх ёстой');
+      return;
+    }
     if (pw.isEmpty || pw.length < 6) {
       _showSnackBar('Нууц үг 6-с дээш тэмдэгт байх ёстой');
       return;
@@ -170,16 +174,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   // Утас
                   _buildUnderlineField(
                     controller: _phoneController,
-                    hint: 'Утас',
+                    hint: '8 оронтой утасны дугаар',
                     keyboardType: TextInputType.phone,
+                    maxLength: 8,
                   ),
                   const SizedBox(height: 6),
 
-                  // Цахим шуудан тайлбар текст
+                  // Тайлбар текст
                   Padding(
                     padding: const EdgeInsets.only(left: 4),
                     child: Text(
-                      'Цаашид ашиглах 6 оронтой код оруулна уу',
+                      'Утасны дугаар 8 оронтой тоо байх ёстой',
                       style: TextStyle(
                         fontSize: 12,
                         color: _orange,
@@ -192,7 +197,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   // Нууц үг
                   _buildUnderlineField(
                     controller: _passwordController,
-                    hint: 'Нууц үг',
+                    hint: 'Нууц үг (6-с дээш тэмдэгт)',
                     obscure: _obscurePassword,
                     suffixIcon: GestureDetector(
                       onTap: () => setState(
@@ -278,11 +283,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
     TextInputType? keyboardType,
     bool obscure = false,
     Widget? suffixIcon,
+    int? maxLength,
   }) {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
       obscureText: obscure,
+      maxLength: maxLength,
       style: const TextStyle(fontSize: 15),
       decoration: InputDecoration(
         hintText: hint,
@@ -291,6 +298,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           color: Colors.grey.shade400,
           fontWeight: FontWeight.w400,
         ),
+        counterText: '',
         suffixIcon: suffixIcon,
         contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
         border: const UnderlineInputBorder(

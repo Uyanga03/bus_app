@@ -56,6 +56,14 @@ class _LoginScreenState extends State<LoginScreen> {
       _showSnackBar('Утас болон нууц үгээ оруулна уу');
       return;
     }
+    if (phone.length != 8 || int.tryParse(phone) == null) {
+      _showSnackBar('Утасны дугаар 8 оронтой тоо байх ёстой');
+      return;
+    }
+    if (password.length < 6) {
+      _showSnackBar('Нууц үг 6-с дээш тэмдэгт байх ёстой');
+      return;
+    }
 
     // Жолоочийн нэмэлт шалгалт
     if (_selectedRole == 'Жолооч') {
@@ -94,6 +102,11 @@ class _LoginScreenState extends State<LoginScreen> {
             'id': data['user']?['_id'] ?? '',
             'phone': phone,
             'role': _selectedRole,
+            if (_selectedRole == 'Жолооч') ...{
+              'busRoute': data['user']?['busRoute'] ?? '',
+              'busNumber': data['user']?['busNumber'] ?? '',
+              'companyName': data['user']?['companyName'] ?? '',
+            },
           });
         }
       } else {
@@ -462,9 +475,10 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 6),
         _buildTextField(
           controller: _phoneController,
-          hint: 'Утасны дугаар',
+          hint: '8 оронтой утасны дугаар',
           keyboardType: TextInputType.phone,
           prefixIcon: Icons.phone_outlined,
+          maxLength: 8,
         ),
         const SizedBox(height: 16),
 
@@ -473,7 +487,7 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 6),
         _buildTextField(
           controller: _passwordController,
-          hint: 'Нууц үг',
+          hint: '6-с дээш тэмдэгт',
           obscure: _obscurePassword,
           prefixIcon: Icons.lock_outline,
           suffixIcon: IconButton(
@@ -833,15 +847,18 @@ class _LoginScreenState extends State<LoginScreen> {
     bool obscure = false,
     IconData? prefixIcon,
     Widget? suffixIcon,
+    int? maxLength,
   }) {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
       obscureText: obscure,
+      maxLength: maxLength,
       style: const TextStyle(fontSize: 14),
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+        counterText: '',
         prefixIcon: prefixIcon != null
             ? Icon(prefixIcon, color: Colors.grey.shade400, size: 20)
             : null,

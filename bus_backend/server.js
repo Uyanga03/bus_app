@@ -268,28 +268,12 @@ app.delete('/api/routes/:id', async (req, res) => {
 //  FEEDBACK API (ШИНЭЧЛЭГДСЭН — Flutter кодтой 100% таарна)
 // ═══════════════════════════════════════════════════════════════════════════
 
-// ── GET /api/feedback — Энгийн хэрэглэгч: зөвхөн approved + устгаагүй ──
+// ── GET /api/feedback — Бүх постууд (устгаагүй) ──
 app.get('/api/feedback', async (req, res) => {
   try {
-    const filter = { status: 'approved', isDeleted: { $ne: true } };
-    if (req.query.type) {
-      filter.type = req.query.type;
-    }
-    if (req.query.category) {
-      filter.category = req.query.category;
-    }
-    if (req.query.userId) {
-      const ownPosts = await Feedback.find({ userId: req.query.userId, isDeleted: { $ne: true } }).sort({ createdAt: -1 });
-      const approvedPosts = await Feedback.find(filter).sort({ createdAt: -1 });
-      const allIds = new Set();
-      const merged = [];
-      for (const p of [...ownPosts, ...approvedPosts]) {
-        const id = p._id.toString();
-        if (!allIds.has(id)) { allIds.add(id); merged.push(p); }
-      }
-      merged.sort((a, b) => b.createdAt - a.createdAt);
-      return res.json(merged);
-    }
+    const filter = { isDeleted: { $ne: true } };
+    if (req.query.type) filter.type = req.query.type;
+    if (req.query.category) filter.category = req.query.category;
     const feedbacks = await Feedback.find(filter).sort({ createdAt: -1 });
     res.json(feedbacks);
   } catch (err) {
@@ -321,9 +305,11 @@ app.post('/api/feedback', upload.array('media', 5), async (req, res) => {
       type,
       message: message || '',
       busNumber: busNumber || '',
+      category: category || '',
       userName: userName || 'Зочин',
       userId: userId || '',
       mediaUrls,
+      status: 'approved',
     });
     await feedback.save();
     res.status(201).json(feedback);
@@ -429,6 +415,16 @@ app.put('/api/feedback/:id/restore', async (req, res) => {
     feedback.deletedAt = null;
     await feedback.save();
     res.json({ message: 'Сэргээгдлээ', feedback });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── DELETE /api/feedback/:id/permanent — Бүр мөсөн устгах ──
+app.delete('/api/feedback/:id/permanent', async (req, res) => {
+  try {
+    await Feedback.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Бүр мөсөн устгагдлаа' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

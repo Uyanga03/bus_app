@@ -16,7 +16,6 @@ class DriverPostScreen extends StatefulWidget {
 class _DriverPostScreenState extends State<DriverPostScreen> {
   final TextEditingController _routeController = TextEditingController();
   final TextEditingController _busNumberController = TextEditingController();
-  final TextEditingController _timeController = TextEditingController();
   final TextEditingController _dateController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
   final TextEditingController _noteController = TextEditingController();
@@ -24,15 +23,28 @@ class _DriverPostScreenState extends State<DriverPostScreen> {
   final ImagePicker _imagePicker = ImagePicker();
   List<XFile> _selectedImages = [];
   bool _isLoading = false;
+  String _selectedCategory = '';
 
   static const _orange = Color(0xFFF57C00);
   static const _darkHeader = Color(0xFF5D4037);
 
   @override
+  void initState() {
+    super.initState();
+    // Жолоочийн бүртгэлээс автоматаар бөглөх
+    _routeController.text = widget.user['busRoute']?.toString() ?? '';
+    _busNumberController.text = widget.user['busNumber']?.toString() ?? '';
+    // Огноо автомат
+    final now = DateTime.now();
+    _dateController.text = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    // Авах газар = автобусны бааз (компанийн нэр)
+    _locationController.text = widget.user['companyName']?.toString() ?? '';
+  }
+
+  @override
   void dispose() {
     _routeController.dispose();
     _busNumberController.dispose();
-    _timeController.dispose();
     _dateController.dispose();
     _locationController.dispose();
     _noteController.dispose();
@@ -72,20 +84,6 @@ class _DriverPostScreenState extends State<DriverPostScreen> {
     } catch (_) {}
   }
 
-  // ── Цаг сонгох ──
-  Future<void> _pickTime() async {
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
-    );
-    if (time != null) {
-      setState(() {
-        _timeController.text =
-            '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-      });
-    }
-  }
-
   // ── Огноо сонгох ──
   Future<void> _pickDate() async {
     final date = await showDatePicker(
@@ -121,14 +119,14 @@ class _DriverPostScreenState extends State<DriverPostScreen> {
       request.fields['busNumber'] = _routeController.text.trim();
       request.fields['userName'] = widget.user['name'] ?? 'Жолооч';
       request.fields['userId'] = widget.user['id'] ?? '';
+      if (_selectedCategory.isNotEmpty) {
+        request.fields['category'] = _selectedCategory;
+      }
 
       // Мессеж бүрдүүлэх
       final msgParts = <String>[];
       if (_busNumberController.text.trim().isNotEmpty) {
         msgParts.add('Автобус: ${_busNumberController.text.trim()}');
-      }
-      if (_timeController.text.trim().isNotEmpty) {
-        msgParts.add('Цаг: ${_timeController.text.trim()}');
       }
       if (_dateController.text.trim().isNotEmpty) {
         msgParts.add('Огноо: ${_dateController.text.trim()}');
@@ -337,6 +335,44 @@ class _DriverPostScreenState extends State<DriverPostScreen> {
                   ),
                   const SizedBox(height: 20),
 
+                  // ── Ангилал ──
+                  const Text('Ангилал:',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF5D4037))),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      'Цахилгаан эд зүйл',
+                      'Цүнх',
+                      'Түлхүүр',
+                      'Бичиг баримт',
+                      'Түрийвч',
+                      'Хувцас',
+                      'Бусад эд зүйл',
+                    ].map((c) {
+                      final sel = _selectedCategory == c;
+                      return GestureDetector(
+                        onTap: () => setState(() => _selectedCategory = c),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: sel ? _orange : Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: sel ? _orange : Colors.grey.shade300),
+                          ),
+                          child: Text(c,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: sel ? Colors.white : Colors.grey.shade700,
+                                fontWeight: sel ? FontWeight.w600 : FontWeight.w400,
+                              )),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+
                   // ── Чиглэл ──
                   _buildField(
                     label: 'Чиглэл:',
@@ -350,16 +386,6 @@ class _DriverPostScreenState extends State<DriverPostScreen> {
                     label: 'Автобус:',
                     controller: _busNumberController,
                     hint: '16-007',
-                  ),
-                  const SizedBox(height: 12),
-
-                  // ── Цаг ──
-                  _buildField(
-                    label: 'Цаг:',
-                    controller: _timeController,
-                    hint: '18:45',
-                    onTap: _pickTime,
-                    readOnly: true,
                   ),
                   const SizedBox(height: 12),
 

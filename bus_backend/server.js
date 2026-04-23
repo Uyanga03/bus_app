@@ -123,7 +123,7 @@ const otpSchema = new mongoose.Schema({
   phone:     { type: String, required: true },
   code:      { type: String, required: true },
   type:      { type: String, enum: ['register', 'reset', 'login'], default: 'register' },
-  expiresAt: { type: Date, default: () => new Date(Date.now() + 5 * 60 * 1000) },
+  expiresAt: { type: Date, default: () => new Date(Date.now() + 2 * 60 * 1000) },
   isUsed:    { type: Boolean, default: false },
 });
 otpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });

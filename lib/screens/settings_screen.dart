@@ -131,6 +131,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 children: [
                   // ── Профайл зураг ──
+                  if (widget.user['role'] == 'Жолооч') ...[
+                    // Жолооч: зураг солих боломжгүй
+                    CircleAvatar(
+                      radius: 40,
+                      backgroundColor: Colors.grey.shade200,
+                      child: Icon(Icons.person_outline, size: 40, color: Colors.grey.shade500),
+                    ),
+                  ] else ...[
                   GestureDetector(
                     onTap: _pickProfileImage,
                     child: Stack(
@@ -164,6 +172,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ],
                     ),
                   ),
+                  ],
                   const SizedBox(height: 10),
                   Text(
                     _name,
@@ -228,11 +237,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 24),
 
                   // ── Овог ──
-                  _infoCard(label: 'Овог', value: _lastName),
+                  if (widget.user['role'] == 'Жолооч')
+                    _infoCard(label: 'Овог', value: _lastName)
+                  else
+                    _infoCard(label: 'Овог', value: _lastName),
                   const SizedBox(height: 10),
 
                   // ── Нэр ──
-                  _infoCard(label: 'Нэр', value: _firstName),
+                  if (widget.user['role'] == 'Жолооч')
+                    _infoCard(label: 'Нэр', value: _firstName)
+                  else
+                    _infoCard(label: 'Нэр', value: _firstName),
                   const SizedBox(height: 10),
 
                   // ── Утасны дугаар ──

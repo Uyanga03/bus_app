@@ -6,8 +6,9 @@ import 'dart:typed_data';
 
 class DriverPostScreen extends StatefulWidget {
   final Map<String, dynamic> user;
+  final List<XFile>? initialPhotos;
 
-  const DriverPostScreen({super.key, required this.user});
+  const DriverPostScreen({super.key, required this.user, this.initialPhotos});
 
   @override
   State<DriverPostScreen> createState() => _DriverPostScreenState();
@@ -39,6 +40,10 @@ class _DriverPostScreenState extends State<DriverPostScreen> {
     _dateController.text = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     // Авах газар = автобусны бааз (компанийн нэр)
     _locationController.text = widget.user['companyName']?.toString() ?? '';
+    // Камераас ирсэн зургууд
+    if (widget.initialPhotos != null && widget.initialPhotos!.isNotEmpty) {
+      _selectedImages = List.from(widget.initialPhotos!);
+    }
   }
 
   @override
@@ -207,17 +212,6 @@ class _DriverPostScreenState extends State<DriverPostScreen> {
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: _isLoading ? null : _submitPost,
-                  child: Text(
-                    'Нийтлэх',
-                    style: TextStyle(
-                      color: _isLoading ? Colors.white54 : Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
                     ),
                   ),
                 ),

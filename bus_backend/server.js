@@ -5,22 +5,22 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const multer = require('multer');
-const path = require('path');
+const bcrypt = require('bcryptjs');         // ШИНЭ
+const jwt = require('jsonwebtoken');        // ШИНЭ
+const multer = require('multer');           // ШИНЭ
+const path = require('path');              // ШИНЭ
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true }));                    // ШИНЭ
 app.use('/images', express.static(path.join(__dirname, 'assets/images')));
 
 // ── JWT тохиргоо (.env файлаас уншина) ──
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN;
 
-// ── Multer (зураг/бичлэг upload) ──
+// ── ШИНЭ: Multer (зураг/бичлэг upload) ──
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, 'assets/images/'),
   filename: (req, file, cb) => {
@@ -50,7 +50,7 @@ mongoose.connect(MONGO_URI)
 //  SCHEMAS
 // ═══════════════════════════════════════════════════════════════════════════
 
-// ── Route Schema ──
+// ── Route Schema (ХУУЧНААР) ──────────────────────────────────────────────
 const routeSchema = new mongoose.Schema({
   name:  { type: String, required: true },
   full:  { type: String, required: true },
@@ -59,11 +59,21 @@ const routeSchema = new mongoose.Schema({
 
 const Route = mongoose.model('Route', routeSchema);
 
-// ── Feedback Schema ──
+// ── Feedback Schema (ШИНЭЧЛЭГДСЭН — Flutter кодтой таарна) ──────────────
 const commentSchema = new mongoose.Schema({
   userName:  { type: String, default: 'Хэрэглэгч' },
   userId:    { type: String, default: '' },
   message:   { type: String, required: true },
+  mentions:  { type: [String], default: [] },       // @mention хийсэн хэрэглэгчдийн нэрс
+  likes:     { type: Number, default: 0 },
+  likedBy:   { type: [String], default: [] },       // Like дарсан хэрэглэгчдийн ID
+  replies:   { type: [{ 
+    userName: { type: String, default: '' },
+    userId:   { type: String, default: '' },
+    message:  { type: String, default: '' },
+    mentions: { type: [String], default: [] },
+    createdAt: { type: Date, default: Date.now },
+  }], default: [] },
   createdAt: { type: Date, default: Date.now },
 });
 
@@ -71,20 +81,21 @@ const feedbackSchema = new mongoose.Schema({
   type:         { type: String, required: true },
   message:      { type: String, default: '' },
   busNumber:    { type: String, default: '' },
-  category:     { type: String, default: '' },
+  category:     { type: String, default: '' },  // Ангилал: Цахилгаан эд зүйл, Цүнх, Түлхүүр, ...
   userName:     { type: String, default: 'Зочин' },
-  userId:       { type: String, default: '' },
+  userId:       { type: String, default: '' },          // ШИНЭ
   likes:        { type: Number, default: 0 },
-  likedBy:      { type: [String], default: [] },
+  likedBy:      { type: [String], default: [] },        // ШИНЭ — Flutter дээр шалгадаг
   comments:     { type: Number, default: 0 },
-  commentsList: { type: [commentSchema], default: [] },
-  mediaUrls:    { type: [String], default: [] },
-  image:        { type: String, default: '' },
+  commentsList: { type: [commentSchema], default: [] }, // ШИНЭ
+  mediaUrls:    { type: [String], default: [] },        // ШИНЭ
+  image:        { type: String, default: '' },          // Хуучин field хэвээр
   status:       { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
-  resolved:     { type: Boolean, default: false },
+  resolved:     { type: Boolean, default: false },  // Алдсан→олдсон, Санал/Гомдол→шийдвэрлэгдсэн
   resolvedAt:   { type: Date, default: null },
   approvedBy:   { type: String, default: '' },
   approvedAt:   { type: Date, default: null },
+  // ── Хадгалах хугацааны систем (олдсон/алдсан эд зүйлд) ──
   storagePhase: { type: String, enum: ['station', 'police', 'returned', 'expired'], default: 'station' },
   stationDeadline: { type: Date, default: null },
   policeDeadline:  { type: Date, default: null },
@@ -97,7 +108,7 @@ const feedbackSchema = new mongoose.Schema({
 
 const Feedback = mongoose.model('Feedback', feedbackSchema);
 
-// ── User Schema ──
+// ── ШИНЭ: User Schema ──
 const userSchema = new mongoose.Schema({
   lastName:        { type: String, required: true, trim: true },
   firstName:       { type: String, required: true, trim: true },
@@ -118,31 +129,33 @@ userSchema.methods.matchPassword = async function (entered) {
 
 const User = mongoose.model('User', userSchema);
 
-// ── OTP Schema ──
+// ── ШИНЭ: OTP Schema ──
 const otpSchema = new mongoose.Schema({
   phone:     { type: String, required: true },
   code:      { type: String, required: true },
   type:      { type: String, enum: ['register', 'reset', 'login'], default: 'register' },
-  expiresAt: { type: Date, default: () => new Date(Date.now() + 2 * 60 * 1000) },
+  expiresAt: { type: Date, default: () => new Date(Date.now() + 5 * 60 * 1000) },
   isUsed:    { type: Boolean, default: false },
 });
 otpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 const Otp = mongoose.model('Otp', otpSchema);
 
-// ── Driver Schema ──
+// ── ШИНЭ: Driver Schema (тусдаа collection) ──
 const driverSchema = new mongoose.Schema({
   lastName:        { type: String, required: true, trim: true },
   firstName:       { type: String, required: true, trim: true },
   phone:           { type: String, required: true, unique: true, trim: true },
   password:        { type: String, required: true, minlength: 6 },
-  driverLicense:   { type: String, required: true, trim: true },
-  companyCode:     { type: String, required: true, trim: true },
-  companyName:     { type: String, default: '' },
-  busRoute:        { type: String, default: '' },
-  busNumber:       { type: String, default: '' },
+  driverLicense:   { type: String, required: true, trim: true },  // Жолоочийн үнэмлэхний дугаар
+  companyCode:     { type: String, required: true, trim: true },  // Компанийн код
+  companyName:     { type: String, default: '' },                  // Компанийн нэр
+  busRoute:        { type: String, default: '' },                  // Хариуцсан чиглэл
+  busNumber:       { type: String, default: '' },                  // Автобусны дугаар
   role:            { type: String, default: 'Жолооч' },
   isActive:        { type: Boolean, default: true },
+  isDeleted:       { type: Boolean, default: false },
+  deletedAt:       { type: Date, default: null },
 }, { timestamps: true });
 
 driverSchema.pre('save', async function () {
@@ -156,14 +169,14 @@ driverSchema.methods.matchPassword = async function (entered) {
 
 const Driver = mongoose.model('Driver', driverSchema);
 
-// ── Admin Schema ──
+// ── ШИНЭ: Admin Schema (тусдаа collection) ──
 const adminSchema = new mongoose.Schema({
   lastName:    { type: String, required: true, trim: true },
   firstName:   { type: String, required: true, trim: true },
   phone:       { type: String, required: true, unique: true, trim: true },
   password:    { type: String, required: true, minlength: 6 },
   role:        { type: String, default: 'Админ' },
-  permissions: { type: [String], default: ['all'] },
+  permissions: { type: [String], default: ['all'] },  // Эрхийн түвшин
 }, { timestamps: true });
 
 adminSchema.pre('save', async function () {
@@ -208,11 +221,12 @@ async function sendSms(phone, message) {
   console.log(`📱 SMS → ${phone}`);
   console.log(`📝 ${message}`);
   console.log('═══════════════════════════════════');
+  // Production дээр CallPro API-г энд холбоно
   return true;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  ROUTE API
+//  ROUTE API (ХУУЧНААР — ӨӨРЧЛӨЛТГҮЙ)
 // ═══════════════════════════════════════════════════════════════════════════
 
 app.get('/api/routes', async (req, res) => {
@@ -263,7 +277,7 @@ app.delete('/api/routes/:id', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  FEEDBACK API
+//  FEEDBACK API (ШИНЭЧЛЭГДСЭН — Flutter кодтой 100% таарна)
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── GET /api/feedback — Бүх постууд (устгаагүй) ──
@@ -289,14 +303,11 @@ app.get('/api/feedback/admin', async (req, res) => {
   }
 });
 
-// ══════════════════════════════════════════════════════════════════════
-//  POST /api/feedback (JSON + Multipart аль аль нь)
-//  ✅ ЗАСАГДСАН: category-г req.body-оос задалсан
-// ══════════════════════════════════════════════════════════════════════
+// ── POST /api/feedback (JSON + Multipart аль аль нь) ──
+// Flutter илгээх: type, message, busNumber, userName, userId, media[] файлууд
 app.post('/api/feedback', upload.array('media', 5), async (req, res) => {
   try {
-    // ✅ ЗАСВАР: category нэмэгдсэн
-    const { type, message, busNumber, userName, userId, category } = req.body;
+    const { type, message, busNumber, userName, userId } = req.body;
 
     const mediaUrls = req.files
       ? req.files.map((f) => `/images/${f.filename}`)
@@ -320,12 +331,15 @@ app.post('/api/feedback', upload.array('media', 5), async (req, res) => {
 });
 
 // ── PUT /api/feedback/:id/like ──
+// Flutter илгээх: { userId }
+// Flutter дээр likedBy массиваас userId-г шалгаж давхар like-аас хамгаалдаг
 app.put('/api/feedback/:id/like', async (req, res) => {
   try {
     const { userId } = req.body;
     const feedback = await Feedback.findById(req.params.id);
     if (!feedback) return res.status(404).json({ error: 'Not found' });
 
+    // Давхар like хийхээс хамгаалах
     if (userId && feedback.likedBy.includes(userId)) {
       return res.status(400).json({ message: 'Аль хэдийн like дарсан' });
     }
@@ -334,6 +348,7 @@ app.put('/api/feedback/:id/like', async (req, res) => {
     if (userId) feedback.likedBy.push(userId);
     await feedback.save();
 
+    // Мэдэгдэл үүсгэх (постын эзэнд)
     if (feedback.userId && feedback.userId !== userId) {
       try {
         await Notification.create({
@@ -356,7 +371,7 @@ app.put('/api/feedback/:id/like', async (req, res) => {
 // ── POST /api/feedback/:id/comment ──
 app.post('/api/feedback/:id/comment', async (req, res) => {
   try {
-    const { message, userName, userId } = req.body;
+    const { message, userName, userId, mentions } = req.body;
     const feedback = await Feedback.findById(req.params.id);
     if (!feedback) return res.status(404).json({ error: 'Not found' });
 
@@ -364,10 +379,12 @@ app.post('/api/feedback/:id/comment', async (req, res) => {
       message,
       userName: userName || 'Хэрэглэгч',
       userId: userId || '',
+      mentions: mentions || [],
     });
     feedback.comments = feedback.commentsList.length;
     await feedback.save();
 
+    // Постын эзэнд мэдэгдэл
     if (feedback.userId && feedback.userId !== userId) {
       try {
         await Notification.create({
@@ -381,13 +398,164 @@ app.post('/api/feedback/:id/comment', async (req, res) => {
       } catch (_) {}
     }
 
+    // @mention хийсэн хэрэглэгчдэд мэдэгдэл
+    if (mentions && mentions.length > 0) {
+      for (const mentionName of mentions) {
+        try {
+          // Бүтэн нэрээр хайх (Овог Нэр)
+          const parts = mentionName.trim().split(' ');
+          let mentionedUser = null;
+          if (parts.length >= 2) {
+            mentionedUser = await User.findOne({ lastName: parts[0], firstName: parts[1] });
+          }
+          if (!mentionedUser) {
+            mentionedUser = await User.findOne({ $or: [
+              { firstName: mentionName.trim() },
+              { lastName: mentionName.trim() },
+              { firstName: new RegExp(mentionName.trim(), 'i') },
+            ]});
+          }
+          if (mentionedUser && mentionedUser._id.toString() !== userId) {
+            await Notification.create({
+              userId: mentionedUser._id,
+              fromUser: userId || '',
+              fromName: userName || '',
+              type: 'mention',
+              message: `${userName || 'Хэрэглэгч'} таныг дурдлаа: "${message.substring(0, 50)}"`,
+              postId: feedback._id,
+            });
+          }
+        } catch (_) {}
+      }
+    }
+
     res.json(feedback);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-// ── DELETE /api/feedback/:id — Зөөлөн устгах ──
+// ── PUT /api/feedback/:id/comment/:commentIndex/like — Comment like ──
+app.put('/api/feedback/:id/comment/:commentIndex/like', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    const feedback = await Feedback.findById(req.params.id);
+    if (!feedback) return res.status(404).json({ error: 'Not found' });
+
+    const idx = parseInt(req.params.commentIndex);
+    if (idx < 0 || idx >= feedback.commentsList.length) return res.status(404).json({ error: 'Comment not found' });
+
+    const comment = feedback.commentsList[idx];
+    if (!comment.likedBy.includes(userId)) {
+      comment.likedBy.push(userId);
+      comment.likes = comment.likedBy.length;
+
+      // Сэтгэгдэл бичсэн хүнд мэдэгдэл
+      if (comment.userId && comment.userId !== userId) {
+        try {
+          const liker = await User.findById(userId);
+          await Notification.create({
+            userId: comment.userId,
+            fromUser: userId,
+            fromName: liker?.firstName || '',
+            type: 'comment_like',
+            message: `${liker?.firstName || 'Хэрэглэгч'} таны сэтгэгдэлд зүрх дарлаа ❤️`,
+            postId: feedback._id,
+          });
+        } catch (_) {}
+      }
+    }
+    await feedback.save();
+    res.json(feedback);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ── POST /api/feedback/:id/comment/:commentIndex/reply — Reply to comment ──
+app.post('/api/feedback/:id/comment/:commentIndex/reply', async (req, res) => {
+  try {
+    const { message, userName, userId, mentions } = req.body;
+    const feedback = await Feedback.findById(req.params.id);
+    if (!feedback) return res.status(404).json({ error: 'Not found' });
+
+    const idx = parseInt(req.params.commentIndex);
+    if (idx < 0 || idx >= feedback.commentsList.length) return res.status(404).json({ error: 'Comment not found' });
+
+    feedback.commentsList[idx].replies.push({
+      message,
+      userName: userName || 'Хэрэглэгч',
+      userId: userId || '',
+      mentions: mentions || [],
+    });
+    await feedback.save();
+
+    // Сэтгэгдэл бичсэн хүнд мэдэгдэл
+    const commentOwner = feedback.commentsList[idx].userId;
+    if (commentOwner && commentOwner !== userId) {
+      try {
+        await Notification.create({
+          userId: commentOwner,
+          fromUser: userId || '',
+          fromName: userName || '',
+          type: 'reply',
+          message: `${userName || 'Хэрэглэгч'} таны сэтгэгдэлд хариулав`,
+          postId: feedback._id,
+        });
+      } catch (_) {}
+    }
+
+    res.json(feedback);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ── DELETE /api/feedback/:id/comment/:commentIndex — Comment устгах ──
+app.delete('/api/feedback/:id/comment/:commentIndex', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    const feedback = await Feedback.findById(req.params.id);
+    if (!feedback) return res.status(404).json({ error: 'Not found' });
+
+    const idx = parseInt(req.params.commentIndex);
+    if (idx < 0 || idx >= feedback.commentsList.length) return res.status(404).json({ error: 'Comment not found' });
+
+    // Зөвхөн өөрийн comment устгаж болно
+    if (feedback.commentsList[idx].userId !== userId) {
+      return res.status(403).json({ error: 'Зөвхөн өөрийн сэтгэгдлийг устгаж болно' });
+    }
+
+    feedback.commentsList.splice(idx, 1);
+    feedback.comments = feedback.commentsList.length;
+    await feedback.save();
+    res.json(feedback);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ── PUT /api/feedback/:id/comment/:commentIndex — Comment засах ──
+app.put('/api/feedback/:id/comment/:commentIndex', async (req, res) => {
+  try {
+    const { userId, message } = req.body;
+    const feedback = await Feedback.findById(req.params.id);
+    if (!feedback) return res.status(404).json({ error: 'Not found' });
+
+    const idx = parseInt(req.params.commentIndex);
+    if (idx < 0 || idx >= feedback.commentsList.length) return res.status(404).json({ error: 'Comment not found' });
+
+    if (feedback.commentsList[idx].userId !== userId) {
+      return res.status(403).json({ error: 'Зөвхөн өөрийн сэтгэгдлийг засаж болно' });
+    }
+
+    feedback.commentsList[idx].message = message;
+    await feedback.save();
+    res.json(feedback);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
 app.delete('/api/feedback/:id', async (req, res) => {
   try {
     const feedback = await Feedback.findById(req.params.id);
@@ -401,7 +569,7 @@ app.delete('/api/feedback/:id', async (req, res) => {
   }
 });
 
-// ── PUT /api/feedback/:id/restore ──
+// ── PUT /api/feedback/:id/restore — Устгасан постыг сэргээх ──
 app.put('/api/feedback/:id/restore', async (req, res) => {
   try {
     const feedback = await Feedback.findById(req.params.id);
@@ -415,7 +583,7 @@ app.put('/api/feedback/:id/restore', async (req, res) => {
   }
 });
 
-// ── DELETE /api/feedback/:id/permanent ──
+// ── DELETE /api/feedback/:id/permanent — Бүр мөсөн устгах ──
 app.delete('/api/feedback/:id/permanent', async (req, res) => {
   try {
     await Feedback.findByIdAndDelete(req.params.id);
@@ -425,7 +593,7 @@ app.delete('/api/feedback/:id/permanent', async (req, res) => {
   }
 });
 
-// ── PUT /api/feedback/:id/approve ──
+// ── PUT /api/feedback/:id/approve — Пост баталгаажуулах ──
 app.put('/api/feedback/:id/approve', async (req, res) => {
   try {
     const { adminId, adminName } = req.body;
@@ -436,15 +604,17 @@ app.put('/api/feedback/:id/approve', async (req, res) => {
     feedback.approvedBy = adminName || adminId || '';
     feedback.approvedAt = new Date();
 
+    // Олдсон/Алдсан эд зүйлд хадгалах хугацаа тохируулах
     if (feedback.type === 'олдсон' || feedback.type === 'алдсан') {
       feedback.storagePhase = 'station';
       const now = new Date();
-      feedback.stationDeadline = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-      feedback.policeDeadline = new Date(now.getTime() + 6 * 30 * 24 * 60 * 60 * 1000);
+      feedback.stationDeadline = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 хоног
+      feedback.policeDeadline = new Date(now.getTime() + 6 * 30 * 24 * 60 * 60 * 1000); // 6 сар
     }
 
     await feedback.save();
 
+    // Постын эзэнд мэдэгдэл илгээх
     if (feedback.userId) {
       try {
         await Notification.create({
@@ -464,7 +634,7 @@ app.put('/api/feedback/:id/approve', async (req, res) => {
   }
 });
 
-// ── PUT /api/feedback/:id/reject ──
+// ── PUT /api/feedback/:id/reject — Пост цуцлах ──
 app.put('/api/feedback/:id/reject', async (req, res) => {
   try {
     const { adminId, adminName, reason } = req.body;
@@ -474,6 +644,7 @@ app.put('/api/feedback/:id/reject', async (req, res) => {
     feedback.status = 'rejected';
     await feedback.save();
 
+    // Постын эзэнд мэдэгдэл илгээх
     if (feedback.userId) {
       try {
         await Notification.create({
@@ -493,7 +664,7 @@ app.put('/api/feedback/:id/reject', async (req, res) => {
   }
 });
 
-// ── PUT /api/feedback/:id/resolve ──
+// ── PUT /api/feedback/:id/resolve — Пост шийдвэрлэгдсэн/олдсон болгох ──
 app.put('/api/feedback/:id/resolve', async (req, res) => {
   try {
     const { resolved } = req.body;
@@ -504,6 +675,7 @@ app.put('/api/feedback/:id/resolve', async (req, res) => {
     feedback.resolvedAt = feedback.resolved ? new Date() : null;
     await feedback.save();
 
+    // Постын эзэнд мэдэгдэл
     if (feedback.userId) {
       const isLost = feedback.type === 'алдсан';
       const msg = feedback.resolved
@@ -525,10 +697,10 @@ app.put('/api/feedback/:id/resolve', async (req, res) => {
   }
 });
 
-// ── PUT /api/feedback/:id/storage ──
+// ── PUT /api/feedback/:id/storage — Хадгалах шатыг өөрчлөх ──
 app.put('/api/feedback/:id/storage', async (req, res) => {
   try {
-    const { phase } = req.body;
+    const { phase } = req.body; // 'station', 'police', 'returned', 'expired'
     const feedback = await Feedback.findById(req.params.id);
     if (!feedback) return res.status(404).json({ error: 'Пост олдсонгүй' });
 
@@ -544,6 +716,7 @@ app.put('/api/feedback/:id/storage', async (req, res) => {
 
     await feedback.save();
 
+    // Мэдэгдэл илгээх
     if (feedback.userId) {
       let msg = '';
       if (phase === 'police') msg = 'Таны олдсон зүйл цагдаад шилжүүлэгдлээ 🔵 (6 сар хадгална)';
@@ -568,11 +741,12 @@ app.put('/api/feedback/:id/storage', async (req, res) => {
   }
 });
 
-// ── Автомат хугацаа шалгах ──
+// ── Автомат хугацаа шалгах (сервер эхлэхэд 1 цагт нэг удаа) ──
 async function checkStorageDeadlines() {
   try {
     const now = new Date();
 
+    // Станцын хугацаа дууссан → Цагдаад шилжүүлэх
     const stationExpired = await Feedback.find({
       storagePhase: 'station',
       stationDeadline: { $lte: now },
@@ -594,6 +768,7 @@ async function checkStorageDeadlines() {
       }
     }
 
+    // Цагдаагийн хугацаа дууссан → Хугацаа дууссан
     const policeExpired = await Feedback.find({
       storagePhase: 'police',
       policeDeadline: { $lte: now },
@@ -618,6 +793,7 @@ async function checkStorageDeadlines() {
       console.log(`[Storage Check] Station→Police: ${stationExpired.length}, Police→Expired: ${policeExpired.length}`);
     }
 
+    // 20 хоног өнгөрсөн устгасан постуудыг бүрмөсөн устгах
     const twentyDaysAgo = new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000);
     const permanentlyDeleted = await Feedback.deleteMany({
       isDeleted: true,
@@ -631,14 +807,33 @@ async function checkStorageDeadlines() {
   }
 }
 
+// 1 цаг тутамд хугацаа шалгах
 setInterval(checkStorageDeadlines, 60 * 60 * 1000);
+// Сервер эхлэхэд 1 удаа шалгах
 setTimeout(checkStorageDeadlines, 5000);
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  AUTH API
+//  ШИНЭ: AUTH API — login_screen.dart + register_screen.dart -тай таарна
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ── GET /api/users/search?q=query — Хэрэглэгч хайх (@mention, зөвхөн Зорчигч) ──
+app.get('/api/users/search', async (req, res) => {
+  try {
+    const q = req.query.q || '';
+    if (q.length < 1) return res.json([]);
+    const regex = new RegExp(q, 'i');
+    const users = await User.find({
+      $or: [{ firstName: regex }, { lastName: regex }]
+    }).select('firstName lastName').limit(5);
+    res.json(users);
+  } catch (err) {
+    res.json([]);
+  }
+});
+
 // ── POST /api/auth/register ──
+// Flutter илгээх: { lastName, firstName, phone, password }
+// Flutter хүлээх: status 201, { user: { _id, name, phone } }
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { lastName, firstName, phone, password } = req.body;
@@ -675,36 +870,23 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 // ── POST /api/auth/login ──
+// Flutter илгээх: { phone, password, role, driverLicense?, companyCode? }
+// Flutter хүлээх: status 200, { user: { _id, name, phone, role } }
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { phone, password, role, driverLicense, companyCode } = req.body;
 
-    if (!phone || !password) {
-      return res.status(400).json({ message: 'Утас болон нууц үгээ оруулна уу' });
-    }
-
-    // Жолоочоор нэвтрэх
+    // ══════════════════════════════════════════
+    //  Жолоочоор нэвтрэх → үнэмлэх + код
+    // ══════════════════════════════════════════
     if (role === 'Жолооч') {
       if (!driverLicense || !companyCode) {
         return res.status(400).json({ message: 'Үнэмлэхний дугаар болон компанийн код оруулна уу' });
       }
 
-      const driver = await Driver.findOne({ phone });
+      const driver = await Driver.findOne({ driverLicense, companyCode });
       if (!driver) {
         return res.status(401).json({ message: 'Жолоочийн бүртгэл олдсонгүй' });
-      }
-
-      const isMatch = await driver.matchPassword(password);
-      if (!isMatch) {
-        return res.status(401).json({ message: 'Нууц үг буруу байна' });
-      }
-
-      if (driverLicense !== driver.driverLicense) {
-        return res.status(401).json({ message: 'Жолоочийн үнэмлэхний дугаар буруу байна' });
-      }
-
-      if (companyCode !== driver.companyCode) {
-        return res.status(401).json({ message: 'Компанийн код буруу байна' });
       }
 
       if (!driver.isActive) {
@@ -728,7 +910,13 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // Админ
+    if (!phone || !password) {
+      return res.status(400).json({ message: 'Утас болон нууц үгээ оруулна уу' });
+    }
+
+    // ══════════════════════════════════════════
+    //  Админ → admins collection
+    // ══════════════════════════════════════════
     if (role === 'Админ') {
       const admin = await Admin.findOne({ phone });
       if (!admin) {
@@ -754,7 +942,9 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // Зорчигч
+    // ══════════════════════════════════════════
+    //  Зорчигч → users collection
+    // ══════════════════════════════════════════
     const user = await User.findOne({ phone });
     if (!user) {
       return res.status(401).json({ message: 'Утасны дугаар бүртгэлгүй байна' });
@@ -784,6 +974,8 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // ── POST /api/auth/forgot-password ──
+// Flutter илгээх: { phone }
+// Flutter хүлээх: status 200
 app.post('/api/auth/forgot-password', async (req, res) => {
   try {
     const { phone } = req.body;
@@ -805,7 +997,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 
     res.status(200).json({
       message: 'Код амжилттай илгээгдлээ',
-      code,
+      code, // Dev горимд — production дээр хасна
     });
   } catch (err) {
     console.error('Forgot password алдаа:', err);
@@ -814,6 +1006,8 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 });
 
 // ── POST /api/auth/verify-otp ──
+// Flutter илгээх: { phone, otp }
+// Flutter хүлээх: status 200
 app.post('/api/auth/verify-otp', async (req, res) => {
   try {
     const { phone, otp } = req.body;
@@ -848,6 +1042,8 @@ app.post('/api/auth/verify-otp', async (req, res) => {
 });
 
 // ── POST /api/auth/reset-password ──
+// Flutter илгээх: { phone, otp, newPassword }
+// Flutter хүлээх: status 200
 app.post('/api/auth/reset-password', async (req, res) => {
   try {
     const { phone, otp, newPassword } = req.body;
@@ -893,7 +1089,11 @@ app.post('/api/auth/reset-password', async (req, res) => {
   }
 });
 
-// ── PUT /api/auth/change-phone ──
+// ──────────────────────────────────────────────────────────────────────────
+//  PUT /api/auth/change-phone
+//  Flutter илгээх: { newPhone }
+//  Header: Authorization: Bearer <token> (эсвэл token-гүй бол phone-оор хайна)
+// ──────────────────────────────────────────────────────────────────────────
 app.put('/api/auth/change-phone', async (req, res) => {
   try {
     const { newPhone, currentPhone, userId } = req.body;
@@ -902,11 +1102,13 @@ app.put('/api/auth/change-phone', async (req, res) => {
       return res.status(400).json({ message: 'Шинэ утасны дугаар оруулна уу' });
     }
 
+    // Давхардал шалгах
     const exists = await User.findOne({ phone: newPhone });
     if (exists) {
       return res.status(400).json({ message: 'Энэ утасны дугаар өөр хэрэглэгчид бүртгэлтэй байна' });
     }
 
+    // Token, userId, эсвэл хуучин утсаар хэрэглэгч олох
     let user;
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer')) {
@@ -940,7 +1142,11 @@ app.put('/api/auth/change-phone', async (req, res) => {
   }
 });
 
-// ── PUT /api/auth/change-password ──
+// ──────────────────────────────────────────────────────────────────────────
+//  PUT /api/auth/change-password
+//  Flutter илгээх: { currentPassword, newPassword }
+//  Header: Authorization: Bearer <token> (эсвэл token-гүй бол phone-оор)
+// ──────────────────────────────────────────────────────────────────────────
 app.put('/api/auth/change-password', async (req, res) => {
   try {
     const { currentPassword, newPassword, phone, userId } = req.body;
@@ -952,6 +1158,7 @@ app.put('/api/auth/change-password', async (req, res) => {
       return res.status(400).json({ message: 'Шинэ нууц үг 6-с дээш тэмдэгт байх ёстой' });
     }
 
+    // Token, userId, эсвэл утсаар хэрэглэгч олох
     let user;
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer')) {
@@ -972,6 +1179,7 @@ app.put('/api/auth/change-password', async (req, res) => {
       return res.status(404).json({ message: 'Хэрэглэгч олдсонгүй' });
     }
 
+    // Хуучин нууц үг шалгах
     const isMatch = await user.matchPassword(currentPassword);
     if (!isMatch) {
       return res.status(401).json({ message: 'Хуучин нууц үг буруу байна' });
@@ -987,7 +1195,9 @@ app.put('/api/auth/change-password', async (req, res) => {
   }
 });
 
-// ── POST /api/drivers ──
+// ──────────────────────────────────────────────────────────────────────────
+//  POST /api/drivers — Жолооч бүртгэх (Админ эсвэл тест зориулалтаар)
+// ──────────────────────────────────────────────────────────────────────────
 app.post('/api/drivers', async (req, res) => {
   try {
     const { lastName, firstName, phone, password, driverLicense, companyCode,
@@ -1026,7 +1236,7 @@ app.post('/api/drivers', async (req, res) => {
   }
 });
 
-// ── GET /api/drivers ──
+// ── GET /api/drivers — Бүх жолооч нарын жагсаалт ──
 app.get('/api/drivers', async (req, res) => {
   try {
     const drivers = await Driver.find().select('-password').sort({ createdAt: -1 });
@@ -1036,7 +1246,71 @@ app.get('/api/drivers', async (req, res) => {
   }
 });
 
-// ── POST /api/admins ──
+// ── PUT /api/drivers/:id — Жолооч засах ──
+app.put('/api/drivers/:id', async (req, res) => {
+  try {
+    const driver = await Driver.findById(req.params.id);
+    if (!driver) return res.status(404).json({ error: 'Олдсонгүй' });
+    const { lastName, firstName, phone, password, driverLicense, companyCode, companyName, busRoute, busNumber } = req.body;
+    if (lastName) driver.lastName = lastName;
+    if (firstName) driver.firstName = firstName;
+    if (phone) driver.phone = phone;
+    if (driverLicense) driver.driverLicense = driverLicense;
+    if (companyCode) driver.companyCode = companyCode;
+    if (companyName !== undefined) driver.companyName = companyName;
+    if (busRoute !== undefined) driver.busRoute = busRoute;
+    if (busNumber !== undefined) driver.busNumber = busNumber;
+    if (password && password.length >= 6) driver.password = password;
+    await driver.save();
+    res.json({ message: 'Засагдлаа', driver: { ...driver.toObject(), password: undefined } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── DELETE /api/drivers/:id — Жолооч зөөлөн устгах ──
+app.delete('/api/drivers/:id', async (req, res) => {
+  try {
+    const driver = await Driver.findById(req.params.id);
+    if (!driver) return res.status(404).json({ error: 'Олдсонгүй' });
+    driver.isDeleted = true;
+    driver.deletedAt = new Date();
+    driver.isActive = false;
+    await driver.save();
+    res.json({ message: 'Устгагдлаа' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PUT /api/drivers/:id/restore — Жолооч сэргээх ──
+app.put('/api/drivers/:id/restore', async (req, res) => {
+  try {
+    const driver = await Driver.findById(req.params.id);
+    if (!driver) return res.status(404).json({ error: 'Олдсонгүй' });
+    driver.isDeleted = false;
+    driver.deletedAt = null;
+    driver.isActive = true;
+    await driver.save();
+    res.json({ message: 'Сэргээгдлээ' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── DELETE /api/drivers/:id/permanent — Жолооч бүрмөсөн устгах ──
+app.delete('/api/drivers/:id/permanent', async (req, res) => {
+  try {
+    await Driver.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Бүрмөсөн устгагдлаа' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+//  POST /api/admins — Админ үүсгэх (зөвхөн серверээс)
+// ──────────────────────────────────────────────────────────────────────────
 app.post('/api/admins', async (req, res) => {
   try {
     const { lastName, firstName, phone, password } = req.body;
@@ -1070,6 +1344,7 @@ app.post('/api/admins', async (req, res) => {
 //  CHAT API
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ── Chat Schema ──
 const messageSchema = new mongoose.Schema({
   conversationId: { type: String, required: true },
   senderId:       { type: String, required: true },
@@ -1083,16 +1358,16 @@ const messageSchema = new mongoose.Schema({
 const Message = mongoose.model('Message', messageSchema);
 
 const conversationSchema = new mongoose.Schema({
-  participants:   { type: [String], required: true },
-  participantNames: { type: [String], default: [] },
+  participants:   { type: [String], required: true },  // [userId1, userId2]
+  participantNames: { type: [String], default: [] },   // [name1, name2]
   lastMessage:    { type: String, default: '' },
   lastMessageAt:  { type: Date, default: Date.now },
-  unreadCount:    { type: Object, default: {} },
+  unreadCount:    { type: Object, default: {} },       // { userId: count }
 }, { timestamps: true });
 
 const Conversation = mongoose.model('Conversation', conversationSchema);
 
-// ── GET /api/chat/users ──
+// ── GET /api/chat/users — Чатлах боломжтой хэрэглэгчид ──
 app.get('/api/chat/users', async (req, res) => {
   try {
     const users = await User.find().select('lastName firstName phone').sort({ createdAt: -1 });
@@ -1107,11 +1382,12 @@ app.get('/api/chat/users', async (req, res) => {
   }
 });
 
-// ── POST /api/chat/conversations ──
+// ── POST /api/chat/conversations — Шинэ яриа эхлүүлэх эсвэл байгааг олох ──
 app.post('/api/chat/conversations', async (req, res) => {
   try {
     const { userId1, userName1, userId2, userName2 } = req.body;
 
+    // Аль хэдийн яриа байгаа эсэх
     let conversation = await Conversation.findOne({
       participants: { $all: [userId1, userId2] },
     });
@@ -1129,7 +1405,7 @@ app.post('/api/chat/conversations', async (req, res) => {
   }
 });
 
-// ── GET /api/chat/conversations/:userId ──
+// ── GET /api/chat/conversations/:userId — Хэрэглэгчийн бүх яриа ──
 app.get('/api/chat/conversations/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
@@ -1142,7 +1418,7 @@ app.get('/api/chat/conversations/:userId', async (req, res) => {
   }
 });
 
-// ── GET /api/chat/messages/:conversationId ──
+// ── GET /api/chat/messages/:conversationId — Ярианы мессежүүд ──
 app.get('/api/chat/messages/:conversationId', async (req, res) => {
   try {
     const { conversationId } = req.params;
@@ -1153,7 +1429,7 @@ app.get('/api/chat/messages/:conversationId', async (req, res) => {
   }
 });
 
-// ── POST /api/chat/messages ──
+// ── POST /api/chat/messages — Мессеж илгээх ──
 app.post('/api/chat/messages', async (req, res) => {
   try {
     const { conversationId, senderId, senderName, text, imageUrl } = req.body;
@@ -1166,11 +1442,13 @@ app.post('/api/chat/messages', async (req, res) => {
       imageUrl: imageUrl || '',
     });
 
+    // Яриаг шинэчлэх
     await Conversation.findByIdAndUpdate(conversationId, {
       lastMessage: text || '📷 Зураг',
       lastMessageAt: new Date(),
     });
 
+    // Нөгөө хэрэглэгчид мэдэгдэл илгээх
     try {
       const conv = await Conversation.findById(conversationId);
       if (conv) {
@@ -1194,7 +1472,7 @@ app.post('/api/chat/messages', async (req, res) => {
   }
 });
 
-// ── PUT /api/chat/messages/read ──
+// ── PUT /api/chat/messages/read — Мессежүүдийг уншсан гэж тэмдэглэх ──
 app.put('/api/chat/messages/read', async (req, res) => {
   try {
     const { conversationId, userId } = req.body;
@@ -1212,6 +1490,7 @@ app.put('/api/chat/messages/read', async (req, res) => {
 //  NOTIFICATION API
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ── GET /api/notifications/:userId ──
 app.get('/api/notifications/:userId', async (req, res) => {
   try {
     const notifications = await Notification.find({ userId: req.params.userId })
@@ -1222,6 +1501,7 @@ app.get('/api/notifications/:userId', async (req, res) => {
   }
 });
 
+// ── GET /api/notifications/:userId/unread-count ──
 app.get('/api/notifications/:userId/unread-count', async (req, res) => {
   try {
     const count = await Notification.countDocuments({
@@ -1233,6 +1513,7 @@ app.get('/api/notifications/:userId/unread-count', async (req, res) => {
   }
 });
 
+// ── PUT /api/notifications/:userId/read-all ──
 app.put('/api/notifications/:userId/read-all', async (req, res) => {
   try {
     await Notification.updateMany(
@@ -1251,17 +1532,16 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log('Server running: http://localhost:' + PORT);
   console.log('');
-  console.log('Endpoints:');
+  console.log('Хуучин endpoints (өөрчлөлтгүй):');
   console.log('  GET/POST/PUT/DELETE  /api/routes');
-  console.log('  GET/POST/DELETE      /api/feedback');
-  console.log('  PUT                  /api/feedback/:id/like');
-  console.log('  POST                 /api/feedback/:id/comment');
-  console.log('  PUT                  /api/feedback/:id/approve');
-  console.log('  PUT                  /api/feedback/:id/reject');
-  console.log('  PUT                  /api/feedback/:id/resolve');
-  console.log('  PUT                  /api/feedback/:id/storage');
+  console.log('  GET/DELETE           /api/feedback');
   console.log('');
-  console.log('Auth:');
+  console.log('Шинэчлэгдсэн endpoints:');
+  console.log('  POST  /api/feedback              → зураг upload + userId');
+  console.log('  PUT   /api/feedback/:id/like      → likedBy давхар хамгаалалт');
+  console.log('  POST  /api/feedback/:id/comment   → ШИНЭ сэтгэгдэл');
+  console.log('');
+  console.log('Auth endpoints:');
   console.log('  POST  /api/auth/register');
   console.log('  POST  /api/auth/login');
   console.log('  POST  /api/auth/forgot-password');
@@ -1269,13 +1549,4 @@ app.listen(PORT, () => {
   console.log('  POST  /api/auth/reset-password');
   console.log('  PUT   /api/auth/change-phone');
   console.log('  PUT   /api/auth/change-password');
-  console.log('');
-  console.log('Chat:');
-  console.log('  GET/POST  /api/chat/conversations');
-  console.log('  GET/POST  /api/chat/messages');
-  console.log('');
-  console.log('Notifications:');
-  console.log('  GET  /api/notifications/:userId');
-  console.log('  GET  /api/notifications/:userId/unread-count');
-  console.log('  PUT  /api/notifications/:userId/read-all');
 });

@@ -189,26 +189,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       _loadProfileImage();
                     },
                   ),
-                  _settingTile(
-                    icon: Icons.phone_outlined,
-                    label: 'Утасны дугаар солих',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ChangePhoneScreen(user: widget.user),
-                      ),
-                    ),
-                  ),
-                  _settingTile(
-                    icon: Icons.lock_outline,
-                    label: 'Нууц үг солих',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ChangePasswordScreen(user: widget.user),
-                      ),
-                    ),
-                  ),
                   const SizedBox(height: 20),
                 ],
               ),

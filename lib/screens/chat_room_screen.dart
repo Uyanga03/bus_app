@@ -202,7 +202,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                         ),
                       ),
                       const Text(
-                        'Идэвхтэй',
+                        '',
                         style: TextStyle(color: Colors.white70, fontSize: 11),
                       ),
                     ],
@@ -310,71 +310,163 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     final text = msg['text']?.toString() ?? '';
     final imageUrl = msg['imageUrl']?.toString() ?? '';
     final time = _formatTime(msg['createdAt']?.toString());
+    final isRead = msg['read'] == true;
+    final msgId = msg['_id']?.toString() ?? '';
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 3),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.7,
-        ),
-        child: Column(
-          crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            // Зураг
-            if (imageUrl.isNotEmpty)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  'http://localhost:3000$imageUrl',
-                  width: 200,
-                  height: 150,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
+      child: GestureDetector(
+        onLongPress: isMe ? () => _showMessageOptions(msgId, text) : null,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 3),
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.7,
+          ),
+          child: Column(
+            crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            children: [
+              // Зураг
+              if (imageUrl.isNotEmpty)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    'http://localhost:3000$imageUrl',
                     width: 200,
                     height: 150,
-                    color: Colors.grey.shade200,
-                    child: const Icon(Icons.broken_image),
-                  ),
-                ),
-              ),
-            // Текст
-            if (text.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: isMe ? _orange : Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(16),
-                    topRight: const Radius.circular(16),
-                    bottomLeft: Radius.circular(isMe ? 16 : 4),
-                    bottomRight: Radius.circular(isMe ? 4 : 16),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      width: 200, height: 150, color: Colors.grey.shade200,
+                      child: const Icon(Icons.broken_image),
                     ),
-                  ],
-                ),
-                child: Text(
-                  text,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isMe ? Colors.white : Colors.black87,
                   ),
                 ),
+              // Текст
+              if (text.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isMe ? _orange : Colors.white,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(16),
+                      topRight: const Radius.circular(16),
+                      bottomLeft: Radius.circular(isMe ? 16 : 4),
+                      bottomRight: Radius.circular(isMe ? 4 : 16),
+                    ),
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 1))],
+                  ),
+                  child: Text(text, style: TextStyle(fontSize: 14, color: isMe ? Colors.white : Colors.black87)),
+                ),
+              const SizedBox(height: 2),
+              // Цаг + харсан/хараагүй icon
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(time, style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                  if (isMe && isRead) ...[
+                    const SizedBox(width: 3),
+                    Icon(Icons.visibility, size: 12, color: const Color(0xFF4CAF50)),
+                  ],
+                ],
               ),
-            const SizedBox(height: 2),
-            Text(
-              time,
-              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  // Мессеж засах/устгах popup
+  void _showMessageOptions(String msgId, String currentText) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 8),
+          Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 16),
+          ListTile(
+            leading: const Icon(Icons.edit, color: Color(0xFFF57C00)),
+            title: const Text('Засах'),
+            onTap: () { Navigator.pop(ctx); _editMessage(msgId, currentText); },
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete, color: Colors.red),
+            title: const Text('Устгах', style: TextStyle(color: Colors.red)),
+            onTap: () { Navigator.pop(ctx); _deleteMessage(msgId); },
+          ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+  }
+
+  // Мессеж засах
+  Future<void> _editMessage(String msgId, String currentText) async {
+    final editCtrl = TextEditingController(text: currentText);
+    final newText = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Text('Мессеж засах', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: TextField(
+          controller: editCtrl,
+          autofocus: true,
+          decoration: InputDecoration(
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFF57C00))),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Болих')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, editCtrl.text.trim()),
+            style: ElevatedButton.styleFrom(backgroundColor: _orange, foregroundColor: Colors.white),
+            child: const Text('Хадгалах'),
+          ),
+        ],
+      ),
+    );
+    if (newText == null || newText.isEmpty) return;
+    try {
+      await http.put(
+        Uri.parse('http://localhost:3000/api/chat/messages/$msgId'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'text': newText, 'senderId': widget.user['id']}),
+      );
+      _fetchMessages();
+    } catch (_) {}
+  }
+
+  // Мессеж устгах
+  Future<void> _deleteMessage(String msgId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Text('Мессеж устгах', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: const Text('Энэ мессежийг устгах уу?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Болих')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: const Text('Устгах'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await http.delete(
+        Uri.parse('http://localhost:3000/api/chat/messages/$msgId'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'senderId': widget.user['id']}),
+      );
+      _fetchMessages();
+    } catch (_) {}
   }
 
   String _formatTime(String? dateStr) {

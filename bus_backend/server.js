@@ -1477,12 +1477,41 @@ app.put('/api/chat/messages/read', async (req, res) => {
   try {
     const { conversationId, userId } = req.body;
     await Message.updateMany(
-      { conversationId, senderId: { $ne: userId }, isRead: false },
-      { isRead: true },
+      { conversationId, senderId: { $ne: userId }, read: false },
+      { read: true },
     );
     res.json({ message: 'ok' });
   } catch (err) {
     res.status(500).json({ message: 'Серверийн алдаа' });
+  }
+});
+
+// ── PUT /api/chat/messages/:id — Мессеж засах ──
+app.put('/api/chat/messages/:id', async (req, res) => {
+  try {
+    const { text, senderId } = req.body;
+    const message = await Message.findById(req.params.id);
+    if (!message) return res.status(404).json({ error: 'Олдсонгүй' });
+    if (message.senderId !== senderId) return res.status(403).json({ error: 'Зөвхөн өөрийн мессежийг засаж болно' });
+    message.text = text;
+    await message.save();
+    res.json(message);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── DELETE /api/chat/messages/:id — Мессеж устгах ──
+app.delete('/api/chat/messages/:id', async (req, res) => {
+  try {
+    const { senderId } = req.body;
+    const message = await Message.findById(req.params.id);
+    if (!message) return res.status(404).json({ error: 'Олдсонгүй' });
+    if (message.senderId !== senderId) return res.status(403).json({ error: 'Зөвхөн өөрийн мессежийг устгаж болно' });
+    await Message.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Устгагдлаа' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

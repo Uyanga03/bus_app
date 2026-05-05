@@ -52,7 +52,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
     if (phone.length != 8 || int.tryParse(phone) == null) {
-      _showSnackBar('Утасны дугаар 8 оронтой тоо байх ёстой');
+      _showSnackBar('');
       return;
     }
     if (pw.isEmpty || pw.length < 6) {
@@ -174,7 +174,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   // Утас
                   _buildUnderlineField(
                     controller: _phoneController,
-                    hint: '8 оронтой утасны дугаар',
+                    hint: 'Утасны дугаар',
                     keyboardType: TextInputType.phone,
                     maxLength: 8,
                   ),
@@ -184,7 +184,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   Padding(
                     padding: const EdgeInsets.only(left: 4),
                     child: Text(
-                      'Утасны дугаар 8 оронтой тоо байх ёстой',
+                      '',
                       style: TextStyle(
                         fontSize: 12,
                         color: _orange,

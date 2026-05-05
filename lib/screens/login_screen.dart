@@ -57,7 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
     if (phone.length != 8 || int.tryParse(phone) == null) {
-      _showSnackBar('Утасны дугаар 8 оронтой тоо байх ёстой');
+      _showSnackBar('');
       return;
     }
     if (password.length < 6) {
@@ -373,8 +373,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     ? 'Нууц үгээ мартсан уу?'
                     : _forgotStep == 2
                         ? 'Нэг удаагийн код оруулна уу?'
-                        : 'Нууц үг сартаах')
-                : 'Юм мартсан бүгсэн үү?',
+                        : 'Нууц үг сэргээх')
+                : 'Юм мартаж буусан уу?',
             onBack: () {
               if (_showForgotPassword) {
                 if (_forgotStep > 1) {
@@ -475,7 +475,7 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 6),
         _buildTextField(
           controller: _phoneController,
-          hint: '8 оронтой утасны дугаар',
+          hint: 'Утасны дугаар',
           keyboardType: TextInputType.phone,
           prefixIcon: Icons.phone_outlined,
           maxLength: 8,
@@ -487,7 +487,7 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 6),
         _buildTextField(
           controller: _passwordController,
-          hint: '6-с дээш тэмдэгт',
+          hint: 'Нууц үг',
           obscure: _obscurePassword,
           prefixIcon: Icons.lock_outline,
           suffixIcon: IconButton(
@@ -672,7 +672,7 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Таньд илгээсэн',
+                'Танд илгээсэн',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -690,7 +690,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Нэг удаагийн код оруулан Sms / Бялоос нэвтрэнэ үү.',
+                'Нэг удаагийн код оруулан Sms / нэвтрэнэ үү.',
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey.shade600,
@@ -744,7 +744,7 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 24),
 
         _buildPrimaryButton(
-          label: 'Сартаах',
+          label: 'Сэргээх',
           onPressed: _isLoading ? null : _resetPassword,
         ),
         const SizedBox(height: 16),

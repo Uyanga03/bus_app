@@ -71,14 +71,14 @@ class FeedbackContentState extends State<FeedbackContent>
     'ГОМДОЛ',
     'САНАЛ',
     'ОЛДСОН',
-    'АЛДСАН',
+    'МАРТСАН',
     'ЧАТ',
   ];
   static const Map<int, String> _tabTypeMap = {
     1: 'гомдол',
     2: 'санал',
     3: 'олдсон',
-    4: 'алдсан',
+    4: 'мартсан',
     5: 'чат',
   };
 
@@ -2110,7 +2110,7 @@ class FeedbackContentState extends State<FeedbackContent>
     String selectedType = 'санал';
     String selectedCategory = '';
     bool isAnonymous = _currentUser == null;
-    _selectedMedia = [];
+    // _selectedMedia хоослохгүй — камераас ирсэн зурагийг хадгална
 
     showModalBottomSheet(
       context: context,
@@ -2201,13 +2201,12 @@ class FeedbackContentState extends State<FeedbackContent>
                     Wrap(
                       spacing: 8,
                       children:
-                          ['гомдол', 'санал', 'олдсон', 'алдсан'].map((t) {
+                          ['санал', 'гомдол', 'олдсон', 'мартсан'].map((t) {
                         final sel = selectedType == t;
                         return GestureDetector(
                           onTap: () => setModalState(() {
                             selectedType = t;
-                            // Олдсон/Алдсан бол нэрээ заавал харуулна
-                            if (t == 'олдсон' || t == 'алдсан') isAnonymous = false;
+                            if (t == 'олдсон' || t == 'мартсан') isAnonymous = false;
                           }),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
@@ -2312,7 +2311,14 @@ class FeedbackContentState extends State<FeedbackContent>
 
                     // ── Мессеж ──
                     _inputField(
-                        _messageController, 'Санал гомдлоо бичнэ үү...',
+                        _messageController,
+                        selectedType == 'санал'
+                            ? 'Саналаа бичнэ үү...'
+                            : selectedType == 'гомдол'
+                                ? 'Гомдлоо бичнэ үү...'
+                                : selectedType == 'олдсон'
+                                    ? 'Олдсон зүйлийн талаар бичнэ үү...'
+                                    : 'Мартсан зүйлийн талаар бичнэ үү...',
                         maxLines: 4),
                     const SizedBox(height: 12),
 
@@ -2557,6 +2563,8 @@ class FeedbackContentState extends State<FeedbackContent>
         return Colors.green.shade400;
       case 'алдсан':
         return Colors.orange.shade400;
+      case 'мартсан':
+        return Colors.orange.shade400;
       case 'чат':
         return Colors.purple.shade400;
       default:
@@ -2574,6 +2582,8 @@ class FeedbackContentState extends State<FeedbackContent>
         return 'Олдсон';
       case 'алдсан':
         return 'Алдсан';
+      case 'мартсан':
+        return 'Мартсан';
       case 'чат':
         return 'Чат';
       default:

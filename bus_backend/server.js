@@ -307,7 +307,7 @@ app.get('/api/feedback/admin', async (req, res) => {
 // Flutter илгээх: type, message, busNumber, userName, userId, media[] файлууд
 app.post('/api/feedback', upload.array('media', 5), async (req, res) => {
   try {
-    const { type, message, busNumber, userName, userId } = req.body;
+    const { type, message, busNumber, userName, userId, category } = req.body;
 
     const mediaUrls = req.files
       ? req.files.map((f) => `/images/${f.filename}`)

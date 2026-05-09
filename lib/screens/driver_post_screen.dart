@@ -7,8 +7,9 @@ import 'dart:typed_data';
 class DriverPostScreen extends StatefulWidget {
   final Map<String, dynamic> user;
   final List<XFile>? initialPhotos;
+  final List<Uint8List>? initialBytes;
 
-  const DriverPostScreen({super.key, required this.user, this.initialPhotos});
+  const DriverPostScreen({super.key, required this.user, this.initialPhotos, this.initialBytes});
 
   @override
   State<DriverPostScreen> createState() => _DriverPostScreenState();
@@ -23,6 +24,7 @@ class _DriverPostScreenState extends State<DriverPostScreen> {
 
   final ImagePicker _imagePicker = ImagePicker();
   List<XFile> _selectedImages = [];
+  List<Uint8List> _selectedBytes = [];
   bool _isLoading = false;
   String _selectedCategory = '';
 
@@ -43,6 +45,18 @@ class _DriverPostScreenState extends State<DriverPostScreen> {
     // Камераас ирсэн зургууд
     if (widget.initialPhotos != null && widget.initialPhotos!.isNotEmpty) {
       _selectedImages = List.from(widget.initialPhotos!);
+      // Bytes-ыг урьдчилан авах
+      Future.microtask(() async {
+        final bytesList = <Uint8List>[];
+        for (final f in _selectedImages) {
+          final b = await f.readAsBytes();
+          bytesList.add(Uint8List.fromList(b));
+        }
+        if (mounted) setState(() => _selectedBytes = bytesList);
+      });
+    }
+    if (widget.initialBytes != null && widget.initialBytes!.isNotEmpty) {
+      _selectedBytes = List.from(widget.initialBytes!);
     }
   }
 
@@ -61,16 +75,24 @@ class _DriverPostScreenState extends State<DriverPostScreen> {
     try {
       final files = await _imagePicker.pickMultiImage(imageQuality: 85);
       if (files.isNotEmpty) {
-        setState(() => _selectedImages.addAll(files));
+        final bytesList = <Uint8List>[];
+        for (final f in files) {
+          bytesList.add(Uint8List.fromList(await f.readAsBytes()));
+        }
+        setState(() {
+          _selectedImages.addAll(files);
+          _selectedBytes.addAll(bytesList);
+        });
       }
     } catch (_) {
       try {
-        final file = await _imagePicker.pickImage(
-          source: ImageSource.gallery,
-          imageQuality: 85,
-        );
+        final file = await _imagePicker.pickImage(source: ImageSource.gallery, imageQuality: 85);
         if (file != null) {
-          setState(() => _selectedImages.add(file));
+          final bytes = Uint8List.fromList(await file.readAsBytes());
+          setState(() {
+            _selectedImages.add(file);
+            _selectedBytes.add(bytes);
+          });
         }
       } catch (_) {}
     }
@@ -79,12 +101,13 @@ class _DriverPostScreenState extends State<DriverPostScreen> {
   // ── Камераас зураг авах ──
   Future<void> _takePhoto() async {
     try {
-      final file = await _imagePicker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 85,
-      );
+      final file = await _imagePicker.pickImage(source: ImageSource.camera, imageQuality: 85);
       if (file != null) {
-        setState(() => _selectedImages.add(file));
+        final bytes = Uint8List.fromList(await file.readAsBytes());
+        setState(() {
+          _selectedImages.add(file);
+          _selectedBytes.add(bytes);
+        });
       }
     } catch (_) {}
   }
@@ -261,37 +284,47 @@ class _DriverPostScreenState extends State<DriverPostScreen> {
                                 children: [
                                   ..._selectedImages.asMap().entries.map((entry) {
                                     final i = entry.key;
-                                    final file = entry.value;
+                                    final hasBytes = i < _selectedBytes.length;
                                     return Stack(
                                       children: [
                                         ClipRRect(
                                           borderRadius: BorderRadius.circular(8),
-                                          child: FutureBuilder<Uint8List>(
-                                            future: file.readAsBytes().then(
-                                                (b) => Uint8List.fromList(b)),
-                                            builder: (ctx, snap) {
-                                              if (snap.hasData) {
-                                                return Image.memory(
-                                                  snap.data!,
+                                          child: hasBytes
+                                              ? Image.memory(
+                                                  _selectedBytes[i],
                                                   width: 100,
                                                   height: 100,
                                                   fit: BoxFit.cover,
-                                                );
-                                              }
-                                              return Container(
-                                                width: 100,
-                                                height: 100,
-                                                color: Colors.grey.shade200,
-                                              );
-                                            },
-                                          ),
+                                                )
+                                              : FutureBuilder<Uint8List>(
+                                                  future: entry.value.readAsBytes().then(
+                                                      (b) => Uint8List.fromList(b)),
+                                                  builder: (ctx, snap) {
+                                                    if (snap.hasData) {
+                                                      return Image.memory(
+                                                        snap.data!,
+                                                        width: 100,
+                                                        height: 100,
+                                                        fit: BoxFit.cover,
+                                                      );
+                                                    }
+                                                    return Container(
+                                                      width: 100,
+                                                      height: 100,
+                                                      color: Colors.grey.shade200,
+                                                      child: const Center(child: CircularProgressIndicator()),
+                                                    );
+                                                  },
+                                                ),
                                         ),
                                         Positioned(
                                           top: 2,
                                           right: 2,
                                           child: GestureDetector(
-                                            onTap: () => setState(
-                                                () => _selectedImages.removeAt(i)),
+                                            onTap: () => setState(() {
+                                                _selectedImages.removeAt(i);
+                                                if (i < _selectedBytes.length) _selectedBytes.removeAt(i);
+                                              }),
                                             child: Container(
                                               width: 22,
                                               height: 22,

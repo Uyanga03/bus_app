@@ -40,6 +40,7 @@ class FeedbackContentState extends State<FeedbackContent>
 
   // Шинэ post-ийн зураг/бичлэг
   List<XFile> _selectedMedia = [];
+  List<Uint8List> _selectedMediaBytes = []; // Web дээр bytes-аар хадгалах
 
   // Бүртгэлтэй хэрэглэгчийн мэдээлэл (null бол бүртгэлгүй)
   // TODO: Жинхэнэ auth системтэй холбох
@@ -282,6 +283,7 @@ class FeedbackContentState extends State<FeedbackContent>
     _messageController.clear();
     _busController.clear();
     _selectedMedia.clear();
+    _selectedMediaBytes.clear();
     if (mounted) Navigator.pop(context);
     fetchFeedbacks();
     if (mounted) {
@@ -411,42 +413,57 @@ class FeedbackContentState extends State<FeedbackContent>
   // =====================================================================
   Future<void> _pickImage(ImageSource source) async {
     try {
-      final file = await _imagePicker.pickImage(
-        source: source,
-        imageQuality: 80,
-      );
-      if (file != null) _selectedMedia.add(file);
+      final file = await _imagePicker.pickImage(source: source, imageQuality: 80);
+      if (file != null) {
+        final bytes = Uint8List.fromList(await file.readAsBytes());
+        setState(() {
+          _selectedMedia.add(file);
+          _selectedMediaBytes.add(bytes);
+        });
+      }
     } catch (_) {}
   }
 
   Future<void> _pickVideo(ImageSource source) async {
     try {
       final file = await _imagePicker.pickVideo(source: source);
-      if (file != null) _selectedMedia.add(file);
+      if (file != null) setState(() => _selectedMedia.add(file));
     } catch (_) {}
   }
 
   Future<void> _pickMultiImage() async {
     try {
       final files = await _imagePicker.pickMultiImage(imageQuality: 80);
-      _selectedMedia.addAll(files);
+      for (final f in files) {
+        final bytes = Uint8List.fromList(await f.readAsBytes());
+        _selectedMediaBytes.add(bytes);
+      }
+      setState(() => _selectedMedia.addAll(files));
     } catch (_) {}
   }
 
-  // Галерей icon дарахад шууд утасны зураг/бичлэг нээгдэнэ
   void _openGallery(StateSetter setModalState) async {
     try {
       final files = await _imagePicker.pickMultipleMedia(maxWidth: 1920);
       if (files.isNotEmpty) {
+        final bytesList = <Uint8List>[];
+        for (final f in files) {
+          bytesList.add(Uint8List.fromList(await f.readAsBytes()));
+        }
         _selectedMedia.addAll(files);
+        _selectedMediaBytes.addAll(bytesList);
         setModalState(() {});
       }
     } catch (_) {
-      // pickMultipleMedia дэмжихгүй бол pickMultiImage ашиглана
       try {
         final files = await _imagePicker.pickMultiImage(imageQuality: 85);
         if (files.isNotEmpty) {
+          final bytesList = <Uint8List>[];
+          for (final f in files) {
+            bytesList.add(Uint8List.fromList(await f.readAsBytes()));
+          }
           _selectedMedia.addAll(files);
+          _selectedMediaBytes.addAll(bytesList);
           setModalState(() {});
         }
       } catch (_) {}
@@ -1024,25 +1041,38 @@ class FeedbackContentState extends State<FeedbackContent>
     if (_currentUser != null && _currentUser!['role'] == 'Админ') return;
     // Жолооч бол камер нээж зураг авсны дараа DriverPostScreen руу шилжинэ
     if (_currentUser != null && _currentUser!['role'] == 'Жолооч') {
-      final result = await Navigator.push<List<XFile>>(
+      final result = await Navigator.push<Map<String, dynamic>>(
         context,
         MaterialPageRoute(builder: (_) => const CameraCaptureScreen()),
       );
-      if (result != null && result.isNotEmpty) {
-        Navigator.push(context, MaterialPageRoute(
-          builder: (_) => DriverPostScreen(user: _currentUser!, initialPhotos: result),
-        )).then((res) { if (res == true) fetchFeedbacks(); });
+      if (result != null) {
+        final files = result['files'] as List<XFile>;
+        final bytes = result['bytes'] as List<Uint8List>;
+        if (files.isNotEmpty) {
+          Navigator.push(context, MaterialPageRoute(
+            builder: (_) => DriverPostScreen(
+              user: _currentUser!,
+              initialPhotos: files,
+              initialBytes: bytes,
+            ),
+          )).then((res) { if (res == true) fetchFeedbacks(); });
+        }
       }
       return;
     }
-    final result = await Navigator.push<List<XFile>>(
+    final result = await Navigator.push<Map<String, dynamic>>(
       context,
       MaterialPageRoute(builder: (_) => const CameraCaptureScreen()),
     );
 
-    if (result != null && result.isNotEmpty) {
-      _selectedMedia = result;
-      _showAddDialog();
+    if (result != null) {
+      final files = result['files'] as List<XFile>;
+      final bytes = result['bytes'] as List<Uint8List>;
+      if (files.isNotEmpty) {
+        _selectedMedia = files;
+        _selectedMediaBytes = bytes;
+        _showAddDialog();
+      }
     }
   }
 
@@ -2300,6 +2330,7 @@ class FeedbackContentState extends State<FeedbackContent>
                             final isVid = file.path.endsWith('.mp4') ||
                                 file.path.endsWith('.mov') ||
                                 file.path.endsWith('.avi');
+                            final hasBytes = i < _selectedMediaBytes.length;
                             return Stack(
                               children: [
                                 ClipRRect(
@@ -2316,22 +2347,29 @@ class FeedbackContentState extends State<FeedbackContent>
                                                 size: 32),
                                           ),
                                         )
-                                      : FutureBuilder<Uint8List>(
-                                          future: file.readAsBytes().then((bytes) => Uint8List.fromList(bytes)),
-                                          builder: (context, snapshot) {
-                                            if (snapshot.hasData) {
-                                              return Image.memory(
-                                                snapshot.data!,
-                                                width: 80,
-                                                height: 80,
-                                                fit: BoxFit.cover,
-                                              );
-                                            }
-                                            return Container(
+                                      : hasBytes
+                                          ? Image.memory(
+                                              _selectedMediaBytes[i],
                                               width: 80,
                                               height: 80,
-                                              color: Colors.grey.shade200,
-                                              child: const Center(
+                                              fit: BoxFit.cover,
+                                            )
+                                          : FutureBuilder<Uint8List>(
+                                              future: file.readAsBytes().then((bytes) => Uint8List.fromList(bytes)),
+                                              builder: (context, snapshot) {
+                                                if (snapshot.hasData) {
+                                                  return Image.memory(
+                                                    snapshot.data!,
+                                                    width: 80,
+                                                    height: 80,
+                                                    fit: BoxFit.cover,
+                                                  );
+                                                }
+                                                return Container(
+                                                  width: 80,
+                                                  height: 80,
+                                                  color: Colors.grey.shade200,
+                                                  child: const Center(
                                                 child: CircularProgressIndicator(
                                                   strokeWidth: 2,
                                                   color: Color(0xFFF57C00),

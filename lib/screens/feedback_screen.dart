@@ -2194,40 +2194,48 @@ class FeedbackContentState extends State<FeedbackContent>
                     ],
 
                     // ── Төрөл ──
-                    const Text('Төрөл:',
-                        style: TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      children:
-                          ['санал', 'гомдол', 'олдсон', 'мартсан'].map((t) {
-                        final sel = selectedType == t;
-                        return GestureDetector(
-                          onTap: () => setModalState(() {
-                            selectedType = t;
-                            if (t == 'олдсон' || t == 'мартсан') isAnonymous = false;
-                          }),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: sel
-                                  ? _typeColor(t)
-                                  : Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(_typeLabel(t),
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color:
-                                      sel ? Colors.white : Colors.black87,
-                                  fontWeight: FontWeight.w500,
-                                )),
-                          ),
-                        );
-                      }).toList(),
-                    ),
+                    // ── Төрөл ──
+const Text('Төрөл:',
+    style: TextStyle(
+        fontSize: 13, fontWeight: FontWeight.w500)),
+const SizedBox(height: 8),
+
+// Row болон Expanded ашигласнаар гүйхгүй, шууд нэг шугамд багтана
+Row(
+  children: ['санал', 'гомдол', 'олдсон', 'мартсан'].map((t) {
+    final sel = selectedType == t;
+    return Expanded( // Дэлгэцийн өргөнийг тэнцүү хувааж өгнө
+      child: GestureDetector(
+        onTap: () => setModalState(() {
+          selectedType = t;
+          if (t == 'олдсон' || t == 'мартсан') isAnonymous = false;
+        }),
+        child: Container(
+          // Чипнүүдийн хооронд бага зэрэг зай авах (хамгийн сүүлчийнхээс бусад нь)
+          margin: const EdgeInsets.symmetric(horizontal: 4), 
+          padding: const EdgeInsets.symmetric(vertical: 10), // Дээд доод зай
+          alignment: Alignment.center, // Текстийг голд нь байрлуулах
+          decoration: BoxDecoration(
+            color: sel
+                ? _typeColor(t)
+                : Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            _typeLabel(t),
+            maxLines: 1, // Текст доошоо унахгүй нэг мөр байна
+            overflow: TextOverflow.ellipsis, // Хэрэв багтахгүй бол цэгээр тасална
+            style: TextStyle(
+              fontSize: 12, // Жижиг дэлгэц дээр багтаахын тулд хэмжээг 12 болгов
+              color: sel ? Colors.white : Colors.black87,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }).toList(),
+),
                     const SizedBox(height: 16),
 
                     // ── Ангилал (олдсон үед) ──

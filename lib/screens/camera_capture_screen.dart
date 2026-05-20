@@ -3,7 +3,10 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:typed_data';
 
 class CameraCaptureScreen extends StatefulWidget {
-  const CameraCaptureScreen({super.key});
+  // required-ийг устгаж, хэрэв гаднаас утга өгөхгүй бол автоматаар false (нэвтрээгүй) болгов
+  final bool isLoggedIn; 
+
+  const CameraCaptureScreen({super.key, this.isLoggedIn = false});
 
   @override
   State<CameraCaptureScreen> createState() => _CameraCaptureScreenState();
@@ -20,7 +23,10 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   @override
   void initState() {
     super.initState();
-    _takePhoto();
+    // Нэвтэрсэн хэрэглэгч орж ирвэл шууд камераа нээнcurrent_user
+    if (widget.isLoggedIn) {
+      _takePhoto();
+    }
   }
 
   Future<void> _takePhoto() async {
@@ -55,7 +61,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Header
+            // ── Header ──
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
@@ -65,73 +71,80 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                     child: const Icon(Icons.close, color: Colors.white, size: 28),
                   ),
                   const Spacer(),
-                  if (_capturedBytes.isNotEmpty)
+                  if (_capturedBytes.isNotEmpty && widget.isLoggedIn)
                     Text('${_capturedBytes.length} зураг',
                         style: const TextStyle(color: Colors.white, fontSize: 14)),
                 ],
               ),
             ),
 
-            // Preview
+            // ── Preview эсвэл Хоосон дэлгэц ──
             Expanded(
               child: _showPreview && _previewBytes != null
                   ? Center(
-                      child: Image.memory(_previewBytes!, fit: BoxFit.contain),
+                      child: Image.memory(
+                        _previewBytes!,
+                        fit: BoxFit.contain,
+                      ),
                     )
                   : const Center(
-                      child: CircularProgressIndicator(color: Color(0xFFF57C00)),
+                      child: CircularProgressIndicator(
+                        color: Color(0xFFF57C00),
+                      ),
                     ),
             ),
 
-            // Bottom buttons
-            Container(
-              color: Colors.black,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _bottomBtn(Icons.camera_alt, 'Дахин авах', _takePhoto),
-                  _bottomBtn(Icons.photo_library, 'Галерей', () async {
-                    try {
-                      final files = await _picker.pickMultiImage(imageQuality: 85);
-                      for (final f in files) {
-                        final bytes = Uint8List.fromList(await f.readAsBytes());
-                        setState(() {
-                          _capturedFiles.add(f);
-                          _capturedBytes.add(bytes);
-                          _previewBytes = bytes;
-                          _showPreview = true;
-                        });
-                      }
-                    } catch (_) {}
-                  }),
-                  // Болсон — bytes буцаана
-                  GestureDetector(
-                    onTap: () {
-                      if (_capturedBytes.isNotEmpty) {
-                        Navigator.pop(context, {
-                          'files': _capturedFiles,
-                          'bytes': _capturedBytes,
-                        });
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: _orange,
-                        borderRadius: BorderRadius.circular(24),
+            // ── Доод хэсэг: Нэвтрээгүй бол Банер, Нэвтэрсэн бол Товчлуурууд ──
+       
+          
+              // Нэвтэрсэн үед хэвийн харагдах товчлуурууд
+              Container(
+                color: Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _bottomBtn(Icons.camera_alt, 'Дахин авах', _takePhoto),
+                    _bottomBtn(Icons.photo_library, 'Галерей', () async {
+                      try {
+                        final files = await _picker.pickMultiImage(imageQuality: 85);
+                        for (final f in files) {
+                          final bytes = Uint8List.fromList(await f.readAsBytes());
+                          setState(() {
+                            _capturedFiles.add(f);
+                            _capturedBytes.add(bytes);
+                            _previewBytes = bytes;
+                            _showPreview = true;
+                          });
+                        }
+                      } catch (_) {}
+                    }),
+                    GestureDetector(
+                      onTap: () {
+                        if (_capturedBytes.isNotEmpty) {
+                          Navigator.pop(context, {
+                            'files': _capturedFiles,
+                            'bytes': _capturedBytes,
+                          });
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: _orange,
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: const Text('Болсон',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            )),
                       ),
-                      child: const Text('Болсон',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          )),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
           ],
         ),
       ),

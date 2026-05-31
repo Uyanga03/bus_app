@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -6,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart';
 import 'camera_capture_screen.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
@@ -38,33 +40,32 @@ class FeedbackContentState extends State<FeedbackContent>
   bool isFeedbackLoading = true;
   String? feedbackError;
 
-  // Шинэ post-ийн зураг/бичлэг
   List<XFile> _selectedMedia = [];
-  List<Uint8List> _selectedMediaBytes = []; // Web дээр bytes-аар хадгалах
+  List<Uint8List> _selectedMediaBytes = [];
 
-  // Бүртгэлтэй хэрэглэгчийн мэдээлэл (null бол бүртгэлгүй)
-  // TODO: Жинхэнэ auth системтэй холбох
-  Map<String, dynamic>? _currentUser; // {'name': 'Батаа', 'id': '...'}
+  Map<String, dynamic>? _currentUser;
 
-  // Нээлттэй comment хэсгийн post id
   String? _expandedCommentId;
   String? _replyToCommentId;
   int? _replyToIndex;
   List<dynamic> _mentionSuggestions = [];
 
-  // Like дарсан post-уудын id жагсаалт (локал state)
   Set<String> _likedPostIds = {};
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  ШИНЭ: Хайлт + Hamburger цэсний state
-  // ═══════════════════════════════════════════════════════════════════
+  // ⭐ ШИНЭ: Сэтгэгдэлд оруулах зураг
+  XFile? _commentImage;
+  Uint8List? _commentImageBytes;
+
+  // ⭐ ШИНЭ: Хэрэглэгч солих үед дээш scroll-д
+  final ScrollController _scrollController = ScrollController();
+
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
-  String _selectedCategory = ''; // Ангилал шүүлтүүр
-  bool _showMyPostsOnly = false; // Жолооч: миний постууд
+  String _selectedCategory = '';
+  bool _showMyPostsOnly = false;
   bool _isMenuOpen = false;
-  Uint8List? _profileImageBytes; // Профайл зураг
-  int _unreadNotifCount = 0; // Уншаагүй мэдэгдэл тоо
+  Uint8List? _profileImageBytes;
+  int _unreadNotifCount = 0;
 
   static const List<String> _feedbackTabs = [
     'БҮГД',
@@ -88,7 +89,6 @@ class FeedbackContentState extends State<FeedbackContent>
     _tabController = TabController(length: _feedbackTabs.length, vsync: this);
     _tabController!.addListener(() {
       if (!_tabController!.indexIsChanging) {
-        // ЧАТ таб дарагдсан бол чат дэлгэц нээнэ
         if (_tabController!.index == 5 && _currentUser != null) {
           if (_currentUser!['role'] == 'Админ' || _currentUser!['role'] == 'Жолооч') {
             _tabController!.animateTo(0);
@@ -111,13 +111,10 @@ class FeedbackContentState extends State<FeedbackContent>
         fetchFeedbacks();
       }
     });
-    _loadSavedUser(); // Хадгалсан хэрэглэгчийн мэдээлэл унших
+    _loadSavedUser();
     fetchFeedbacks();
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  Хэрэглэгчийн мэдээлэл хадгалах / унших (SharedPreferences)
-  // ═══════════════════════════════════════════════════════════════════
   Future<void> _loadSavedUser() async {
     final prefs = await SharedPreferences.getInstance();
     final userJson = prefs.getString('currentUser');
@@ -126,14 +123,12 @@ class FeedbackContentState extends State<FeedbackContent>
         _currentUser = json.decode(userJson) as Map<String, dynamic>;
       });
     }
-    // Профайл зураг унших
     final imageBase64 = prefs.getString('profileImage');
     if (imageBase64 != null) {
       setState(() {
         _profileImageBytes = base64Decode(imageBase64);
       });
     }
-    // Мэдэгдлийн тоо авах
     _fetchUnreadCount();
   }
 
@@ -166,13 +161,38 @@ class FeedbackContentState extends State<FeedbackContent>
     _busController.dispose();
     _commentController.dispose();
     _searchController.dispose();
+    _scrollController.dispose();
     _tabController?.dispose();
     super.dispose();
   }
 
-  // =====================================================================
-  //  API
-  // =====================================================================
+  // ⭐ ШИНЭ: Нэг постыг жагсаалтад in-place шинэчлэх (бүхэл reload хийхгүй)
+  void _updateFeedbackInList(dynamic updated) {
+    if (updated == null) return;
+    final id = updated['_id']?.toString();
+    if (id == null || id.isEmpty) return;
+    final idx = feedbacks.indexWhere((f) => f['_id']?.toString() == id);
+    if (idx >= 0) {
+      setState(() {
+        feedbacks[idx] = updated;
+        final likedBy = updated['likedBy'] as List<dynamic>? ?? [];
+        if (_currentUser != null && likedBy.contains(_currentUser!['id'])) {
+          _likedPostIds.add(id);
+        } else {
+          _likedPostIds.remove(id);
+        }
+      });
+    }
+  }
+
+  // ⭐ ШИНЭ: Постыг жагсаалтаас локалаар хасах
+  void _removeFeedbackFromList(String id) {
+    setState(() {
+      feedbacks.removeWhere((f) => f['_id']?.toString() == id);
+      _likedPostIds.remove(id);
+    });
+  }
+
   Future<void> fetchFeedbacks() async {
     setState(() => isFeedbackLoading = true);
 
@@ -189,7 +209,6 @@ class FeedbackContentState extends State<FeedbackContent>
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
 
-        // Серверээс like дарсан мэдээлэл авах
         _likedPostIds.clear();
         if (_currentUser != null) {
           for (final item in data) {
@@ -205,7 +224,7 @@ class FeedbackContentState extends State<FeedbackContent>
           isFeedbackLoading = false;
           feedbackError = null;
         });
-        _fetchUnreadCount(); // Мэдэгдлийн тоо шинэчлэх
+        _fetchUnreadCount();
       } else {
         setState(() {
           isFeedbackLoading = false;
@@ -220,7 +239,6 @@ class FeedbackContentState extends State<FeedbackContent>
     }
   }
 
-  // ── Post илгээх ──
   Future<void> submitFeedback(String type, {bool anonymous = true, String category = ''}) async {
     if (_messageController.text.trim().isEmpty && _selectedMedia.isEmpty) {
       return;
@@ -296,7 +314,6 @@ class FeedbackContentState extends State<FeedbackContent>
     }
   }
 
-  // ── Like (1 account = 1 удаа) ──
   Future<void> likeFeedback(String id) async {
     if (_currentUser == null) {
       _showLoginPrompt('Зүрх дарахын тулд нэвтэрнэ үү.');
@@ -304,12 +321,27 @@ class FeedbackContentState extends State<FeedbackContent>
     }
     if (_currentUser!['role'] == 'Админ' || _currentUser!['role'] == 'Жолооч') return;
 
-    // Аль хэдийн дарсан бол буцаана
-    if (_likedPostIds.contains(id)) return;
+    // ⭐ Toggle — like-тай байсан бол unlike, like-гүй бол like
+    final wasLiked = _likedPostIds.contains(id);
+
+    // Optimistic UI — шууд харагдуулна
+    setState(() {
+      if (wasLiked) {
+        _likedPostIds.remove(id);
+      } else {
+        _likedPostIds.add(id);
+      }
+      // Жагсаалт дотрох тоонд ч өөрчлөлт оруулна
+      final idx = feedbacks.indexWhere((f) => f['_id']?.toString() == id);
+      if (idx >= 0) {
+        final current = (feedbacks[idx]['likes'] ?? 0) as int;
+        feedbacks[idx]['likes'] = wasLiked ? (current - 1).clamp(0, double.infinity).toInt() : current + 1;
+      }
+    });
 
     final url = "http://localhost:3000/api/feedback/$id/like";
     try {
-      await http.put(
+      final res = await http.put(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
@@ -317,44 +349,90 @@ class FeedbackContentState extends State<FeedbackContent>
           'userName': _currentUser!['name'] ?? '',
         }),
       );
-      setState(() => _likedPostIds.add(id));
-      fetchFeedbacks();
-    } catch (_) {}
+      if (res.statusCode == 200) {
+        _updateFeedbackInList(json.decode(res.body));
+      }
+    } catch (_) {
+      // Алдаа гарвал буцаах
+      setState(() {
+        if (wasLiked) {
+          _likedPostIds.add(id);
+        } else {
+          _likedPostIds.remove(id);
+        }
+      });
+    }
   }
 
-  // ── Comment ──
   Future<void> submitComment(String feedbackId) async {
-    if (_commentController.text.trim().isEmpty) return;
+    final hasText = _commentController.text.trim().isNotEmpty;
+    final hasImage = _commentImage != null;
+    if (!hasText && !hasImage) return;
+
     if (_currentUser == null) {
       _showLoginPrompt('Сэтгэгдэл бичихийн тулд нэвтэрнэ үү.');
       return;
     }
     if (_currentUser!['role'] == 'Админ' || _currentUser!['role'] == 'Жолооч') return;
+
     final msg = _commentController.text.trim();
     final mentions = RegExp(r'@\[([^\]]+)\]').allMatches(msg).map((m) => m.group(1)!).toList();
     final url = "http://localhost:3000/api/feedback/$feedbackId/comment";
+
     try {
-      await http.post(
-        Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'message': msg,
-          'userName': _currentUser!['name'] ?? 'Хэрэглэгч',
-          'userId': _currentUser!['id'] ?? '',
-          'mentions': mentions,
-        }),
-      );
+      http.Response response;
+      if (hasImage) {
+        final request = http.MultipartRequest('POST', Uri.parse(url));
+        request.fields['message'] = msg;
+        request.fields['userName'] = _currentUser!['name'] ?? 'Хэрэглэгч';
+        request.fields['userId'] = _currentUser!['id'] ?? '';
+        request.fields['mentions'] = json.encode(mentions);
+        final bytes = await _commentImage!.readAsBytes();
+        request.files.add(http.MultipartFile.fromBytes(
+          'image',
+          bytes,
+          filename: _commentImage!.name,
+        ));
+        final streamed = await request.send();
+        response = await http.Response.fromStream(streamed);
+      } else {
+        response = await http.post(
+          Uri.parse(url),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'message': msg,
+            'userName': _currentUser!['name'] ?? 'Хэрэглэгч',
+            'userId': _currentUser!['id'] ?? '',
+            'mentions': mentions,
+          }),
+        );
+      }
+
+      // ⭐ Бүх listing reload биш — зөвхөн энэ постыг update
+      if (response.statusCode == 200) {
+        final updated = json.decode(response.body);
+        _updateFeedbackInList(updated);
+      }
+
       _commentController.clear();
-      fetchFeedbacks();
+      setState(() {
+        _commentImage = null;
+        _commentImageBytes = null;
+      });
     } catch (_) {}
   }
 
   void _showLoginPrompt(String message) {
     if (!mounted) return;
+    // ⭐ Хэрэв нэвтэрсэн бол огт харуулахгүй
+    if (_currentUser != null) return;
+    // ⭐ Хуучин дараалал бүхнийг арилгана
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.grey.shade700,
+        duration: const Duration(seconds: 3),
         action: SnackBarAction(
           label: 'Нэвтрэх',
           textColor: const Color(0xFFF57C00),
@@ -364,9 +442,6 @@ class FeedbackContentState extends State<FeedbackContent>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  Нэвтрэх / Бүртгүүлэх дэлгэц рүү navigate
-  // ═══════════════════════════════════════════════════════════════════
   void _navigateToLogin() async {
     final result = await Navigator.push<Map<String, dynamic>>(
       context,
@@ -375,16 +450,35 @@ class FeedbackContentState extends State<FeedbackContent>
     if (result != null && mounted) {
       setState(() {
         _currentUser = result;
+        // ⭐ Шинэ хэрэглэгч → бүх state цэвэрлэх
+        _likedPostIds.clear();
+        _expandedCommentId = null;
+        _replyToCommentId = null;
+        _replyToIndex = null;
+        _commentController.clear();
+        _commentImage = null;
+        _commentImageBytes = null;
+        _mentionSuggestions = [];
+        feedbacks = []; // Хуучин кэшээ устгана
+        isFeedbackLoading = true;
       });
-      _saveUser(result); // Хадгалах
-      fetchFeedbacks();
+      _saveUser(result);
+      await fetchFeedbacks();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${result['name']} нэвтэрлээ!'),
-          backgroundColor: const Color(0xFFF57C00),
-        ),
-      );
+      // ⭐ Дээш scroll
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${result['name']} нэвтэрлээ!'),
+            backgroundColor: const Color(0xFFF57C00),
+          ),
+        );
+      }
     }
   }
 
@@ -396,21 +490,34 @@ class FeedbackContentState extends State<FeedbackContent>
     if (result != null && mounted) {
       setState(() {
         _currentUser = result;
+        _likedPostIds.clear();
+        _expandedCommentId = null;
+        _replyToCommentId = null;
+        _replyToIndex = null;
+        _commentController.clear();
+        _commentImage = null;
+        _commentImageBytes = null;
+        _mentionSuggestions = [];
+        feedbacks = [];
+        isFeedbackLoading = true;
       });
-      _saveUser(result); // Хадгалах
-      fetchFeedbacks();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${result['name']} бүртгэгдлээ!'),
-          backgroundColor: const Color(0xFFF57C00),
-        ),
-      );
+      _saveUser(result);
+      await fetchFeedbacks();
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${result['name']} бүртгэгдлээ!'),
+            backgroundColor: const Color(0xFFF57C00),
+          ),
+        );
+      }
     }
   }
 
-  // =====================================================================
-  //  Зураг / Бичлэг сонгох
-  // =====================================================================
   Future<void> _pickImage(ImageSource source) async {
     try {
       final file = await _imagePicker.pickImage(source: source, imageQuality: 80);
@@ -470,20 +577,15 @@ class FeedbackContentState extends State<FeedbackContent>
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  ШИНЭ: Хайлтын шүүлтүүр (локал)
-  // ═══════════════════════════════════════════════════════════════════
   List<dynamic> get _filteredFeedbacks {
     var list = feedbacks.toList();
 
-    // Жолооч: Миний постууд шүүлтүүр
     if (_showMyPostsOnly && _currentUser != null) {
       list = list.where((item) {
         return item['userId']?.toString() == _currentUser!['id'];
       }).toList();
     }
 
-    // Ангилал шүүлтүүр (олдсон постод)
     if (_selectedCategory.isNotEmpty) {
       list = list.where((item) {
         final cat = (item['category']?.toString() ?? '').toLowerCase();
@@ -491,7 +593,6 @@ class FeedbackContentState extends State<FeedbackContent>
       }).toList();
     }
 
-    // Текст хайлт
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
       list = list.where((item) {
@@ -508,7 +609,6 @@ class FeedbackContentState extends State<FeedbackContent>
       }).toList();
     }
 
-    // Жолооч: Өөрийн чиглэлийн постууд эхэнд
     if (!_showMyPostsOnly && _currentUser != null && _currentUser!['role'] == 'Жолооч') {
       final myRoute = _currentUser!['busRoute']?.toString() ?? '';
       if (myRoute.isNotEmpty) {
@@ -528,25 +628,18 @@ class FeedbackContentState extends State<FeedbackContent>
     return list;
   }
 
-  // =====================================================================
-  //  BUILD
-  // =====================================================================
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
         Column(
           children: [
-            // ═════════════════════════════════════════════════════════
-            //  ШИНЭ: Хайлтын мөр + Hamburger icon
-            // ═════════════════════════════════════════════════════════
             Container(
               color: Colors.white,
               padding: const EdgeInsets.only(
                   left: 14, right: 8, top: 8, bottom: 6),
               child: Row(
                 children: [
-                  // Хайлтын талбар
                   Expanded(
                     child: Container(
                       height: 40,
@@ -578,7 +671,6 @@ class FeedbackContentState extends State<FeedbackContent>
                               ),
                             ),
                           ),
-                          // Хайлтын текст байвал цэвэрлэх товч
                           if (_searchQuery.isNotEmpty)
                             GestureDetector(
                               onTap: () {
@@ -597,7 +689,6 @@ class FeedbackContentState extends State<FeedbackContent>
                     ),
                   ),
                   const SizedBox(width: 6),
-                  // Hamburger icon
                   Material(
                     color: Colors.transparent,
                     child: InkWell(
@@ -614,7 +705,6 @@ class FeedbackContentState extends State<FeedbackContent>
               ),
             ),
 
-            // Tab bar (хуучин кодоор)
             Container(
               decoration: const BoxDecoration(
                 border: Border(
@@ -636,7 +726,6 @@ class FeedbackContentState extends State<FeedbackContent>
               ),
             ),
 
-            // ── Ангилал шүүлтүүр (ОЛДСОН таб дээр л харагдана) ──
             if (_tabController != null && _tabController!.index == 3)
               Container(
                 height: 40,
@@ -660,26 +749,18 @@ class FeedbackContentState extends State<FeedbackContent>
           ],
         ),
 
-        // ═════════════════════════════════════════════════════════════
-        //  ШИНЭ: Hamburger цэс (overlay)
-        // ═════════════════════════════════════════════════════════════
         if (_isMenuOpen) _buildSideMenu(),
       ],
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  ШИНЭ: Hamburger Side Menu Widget
-  // ═══════════════════════════════════════════════════════════════════
   Widget _buildSideMenu() {
     return Stack(
       children: [
-        // Бараан дэвсгэр (overlay)
         GestureDetector(
           onTap: () => setState(() => _isMenuOpen = false),
           child: Container(color: Colors.black.withOpacity(0.4)),
         ),
-        // Цэсний хэсэг (зүүн талаас)
         AnimatedContainer(
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeOut,
@@ -698,7 +779,6 @@ class FeedbackContentState extends State<FeedbackContent>
           child: SafeArea(
             child: Column(
               children: [
-                // ── Header (Profile хэсэг) ──
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.fromLTRB(20, 20, 16, 20),
@@ -706,7 +786,6 @@ class FeedbackContentState extends State<FeedbackContent>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Хаах товч
                       Align(
                         alignment: Alignment.topRight,
                         child: GestureDetector(
@@ -716,10 +795,8 @@ class FeedbackContentState extends State<FeedbackContent>
                         ),
                       ),
                       const SizedBox(height: 4),
-                      // Хэрэглэгчийн зураг
                       if (_currentUser != null) ...[
                         if (_currentUser!['role'] == 'Админ') ...[
-                          // Админ: зураг + нэр (профайл линкгүй)
                           CircleAvatar(
                             radius: 28,
                             backgroundColor: Colors.white,
@@ -741,7 +818,6 @@ class FeedbackContentState extends State<FeedbackContent>
                             style: TextStyle(color: Colors.white70, fontSize: 12),
                           ),
                         ] else if (_currentUser!['role'] == 'Жолооч') ...[
-                          // Жолооч: зураг + нэр (профайл линкгүй)
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -763,7 +839,6 @@ class FeedbackContentState extends State<FeedbackContent>
                             ],
                           ),
                         ] else ...[
-                          // Зорчигч: зураг + нэр (линкгүй)
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -817,13 +892,11 @@ class FeedbackContentState extends State<FeedbackContent>
                   ),
                 ),
 
-                // ── Цэсний жагсаалт ──
                 Expanded(
                   child: ListView(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     children: [
                       if (_currentUser != null) ...[
-                        // Админ бол зөвхөн удирдлагын цэс
                         if (_currentUser!['role'] == 'Админ') ...[
                           _menuItem(
                             icon: Icons.manage_search,
@@ -852,7 +925,6 @@ class FeedbackContentState extends State<FeedbackContent>
                             },
                           ),
                         ] else if (_currentUser!['role'] == 'Жолооч') ...[
-                          // Жолоочийн цэс
                           _menuItem(
                             icon: Icons.person_outline,
                             label: 'Профайл',
@@ -868,7 +940,6 @@ class FeedbackContentState extends State<FeedbackContent>
                             },
                           ),
                         ] else ...[
-                          // Зорчигчийн цэс
                           _menuItem(
                             icon: Icons.person_outline,
                             label: 'Миний профайл',
@@ -907,6 +978,10 @@ class FeedbackContentState extends State<FeedbackContent>
                             setState(() {
                               _isMenuOpen = false;
                               _currentUser = null;
+                              _commentController.clear();
+                              _replyToCommentId = null;
+                              _replyToIndex = null;
+                              _mentionSuggestions = [];
                             });
                             _clearSavedUser();
                             _navigateToLogin();
@@ -934,7 +1009,6 @@ class FeedbackContentState extends State<FeedbackContent>
                   ),
                 ),
 
-                // ── Системээс гарах ──
                 if (_currentUser != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
@@ -945,8 +1019,12 @@ class FeedbackContentState extends State<FeedbackContent>
                           setState(() {
                             _currentUser = null;
                             _isMenuOpen = false;
+                            _commentController.clear();
+                            _replyToCommentId = null;
+                            _replyToIndex = null;
+                            _mentionSuggestions = [];
                           });
-                          _clearSavedUser(); // Хадгалсан мэдээлэл устгах
+                          _clearSavedUser();
                         },
                         icon: const Icon(Icons.logout, size: 18),
                         label: const Text('Системээс гарах',
@@ -970,7 +1048,6 @@ class FeedbackContentState extends State<FeedbackContent>
     );
   }
 
-  /// Hamburger цэсний нэг мөр
   Widget _menuItem({
     required IconData icon,
     required String label,
@@ -1007,21 +1084,17 @@ class FeedbackContentState extends State<FeedbackContent>
     );
   }
 
-  /// Гаднаас FAB дарахад дуудна
   void showAddDialog() {
-    // Нэвтрээгүй бол нэвтрэх шаардлагатай
     if (_currentUser == null) {
       _showLoginPrompt('Пост нийтлэхийн тулд нэвтэрнэ үү.');
       return;
     }
-    // Админ пост нийтлэх эрхгүй
     if (_currentUser!['role'] == 'Админ') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Админ пост нийтлэх эрхгүй'), backgroundColor: Colors.grey),
       );
       return;
     }
-    // Жолооч бол тусгай дэлгэц нээнэ
     if (_currentUser!['role'] == 'Жолооч') {
       Navigator.push(
         context,
@@ -1036,10 +1109,12 @@ class FeedbackContentState extends State<FeedbackContent>
     }
   }
 
-  /// Камер FAB дарахад → бүтэн камер дэлгэц нээгдэнэ
   void showCameraPicker() async {
-    if (_currentUser != null && _currentUser!['role'] == 'Админ') return;
-    // Жолооч бол камер нээж зураг авсны дараа DriverPostScreen руу шилжинэ
+    if (_currentUser == null) {
+      _showLoginPrompt('Пост нийтлэхийн тулд нэвтэрнэ үү.');
+      return;
+    }
+    if (_currentUser!['role'] == 'Админ') return;
     if (_currentUser != null && _currentUser!['role'] == 'Жолооч') {
       final result = await Navigator.push<Map<String, dynamic>>(
         context,
@@ -1076,10 +1151,12 @@ class FeedbackContentState extends State<FeedbackContent>
     }
   }
 
-  /// Gallery FAB / icon дарахад → утасны галерей нээгдэнэ
   void showGalleryPicker() async {
-    if (_currentUser != null && _currentUser!['role'] == 'Админ') return;
-    // Жолооч бол шууд DriverPostScreen нээнэ
+    if (_currentUser == null) {
+      _showLoginPrompt('Пост нийтлэхийн тулд нэвтэрнэ үү.');
+      return;
+    }
+    if (_currentUser!['role'] == 'Админ') return;
     if (_currentUser != null && _currentUser!['role'] == 'Жолооч') {
       Navigator.push(context, MaterialPageRoute(
         builder: (_) => DriverPostScreen(user: _currentUser!),
@@ -1095,8 +1172,6 @@ class FeedbackContentState extends State<FeedbackContent>
     } catch (_) {}
   }
 
-  // ── Body ──
-  // ── Ангилал chip ──
   Widget _categoryChip(String label, String value) {
     final isActive = _selectedCategory == value;
     return Padding(
@@ -1165,7 +1240,6 @@ class FeedbackContentState extends State<FeedbackContent>
       );
     }
 
-    // ШИНЭ: Хайлтын шүүлтүүр ашиглана
     final displayList = _filteredFeedbacks;
 
     if (displayList.isEmpty) {
@@ -1197,6 +1271,7 @@ class FeedbackContentState extends State<FeedbackContent>
       color: const Color(0xFFF57C00),
       onRefresh: fetchFeedbacks,
       child: ListView.separated(
+        controller: _scrollController,
         padding: const EdgeInsets.only(bottom: 80),
         itemCount: displayList.length,
         separatorBuilder: (_, __) =>
@@ -1206,9 +1281,6 @@ class FeedbackContentState extends State<FeedbackContent>
     );
   }
 
-  // =====================================================================
-  //  Feedback Card  (ХУУЧИН КОДООР — ӨӨРЧЛӨЛТГҮЙ)
-  // =====================================================================
   Widget _buildFeedbackCard(dynamic item) {
     final type = item['type']?.toString() ?? '';
     final message = item['message']?.toString() ?? '';
@@ -1225,7 +1297,6 @@ class FeedbackContentState extends State<FeedbackContent>
     final postUserId = item['userId']?.toString() ?? '';
     final postCategory = item['category']?.toString() ?? '';
 
-    // Өөрийн пост мөн эсэх шалгах
     final bool isMyPost = _currentUser != null &&
         (postUserId == _currentUser!['id'] ||
          userName == _currentUser!['name']);
@@ -1235,7 +1306,6 @@ class FeedbackContentState extends State<FeedbackContent>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header: Avatar + нэр + чиглэл + төрөл + цаг ──
           Row(
             children: [
               GestureDetector(
@@ -1353,16 +1423,42 @@ class FeedbackContentState extends State<FeedbackContent>
                   ],
                 ),
               ),
+              if (isMyPost)
+                PopupMenuButton<String>(
+                  padding: EdgeInsets.zero,
+                  icon: Icon(Icons.more_vert,
+                      size: 20, color: Colors.grey.shade500),
+                  onSelected: (val) {
+                    if (val == 'edit') _editPost(id, message);
+                    if (val == 'delete') _deletePost(id);
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(children: [
+                        Icon(Icons.edit, size: 16, color: Color(0xFFF57C00)),
+                        SizedBox(width: 8),
+                        Text('Засах'),
+                      ]),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(children: [
+                        Icon(Icons.delete, size: 16, color: Colors.red),
+                        SizedBox(width: 8),
+                        Text('Устгах', style: TextStyle(color: Colors.red)),
+                      ]),
+                    ),
+                  ],
+                ),
             ],
           ),
 
-          // ── Мессеж ──
           if (message.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(message, style: const TextStyle(fontSize: 14, height: 1.4)),
           ],
 
-          // ── Зураг/бичлэг ──
           if (mediaUrls.isNotEmpty) ...[
             const SizedBox(height: 10),
             _buildMediaGrid(mediaUrls),
@@ -1370,11 +1466,9 @@ class FeedbackContentState extends State<FeedbackContent>
 
           const SizedBox(height: 10),
 
-          // ── ♡ Like  +  💬 Comment  +  🔗 Share товчнууд (Админ, Жолооч харахгүй) ──
           if (_currentUser == null || (_currentUser!['role'] != 'Админ' && _currentUser!['role'] != 'Жолооч'))
           Row(
             children: [
-              // Like
               GestureDetector(
                 onTap: () => likeFeedback(id),
                 child: Row(
@@ -1399,7 +1493,6 @@ class FeedbackContentState extends State<FeedbackContent>
                 ),
               ),
               const SizedBox(width: 20),
-              // Comment
               GestureDetector(
                 onTap: () {
                   setState(() {
@@ -1418,7 +1511,6 @@ class FeedbackContentState extends State<FeedbackContent>
                 ),
               ),
               const SizedBox(width: 20),
-              // Share
               GestureDetector(
                 onTap: () => _showShareSheet(
                   userName: userName,
@@ -1432,7 +1524,6 @@ class FeedbackContentState extends State<FeedbackContent>
             ],
           ),
 
-          // ── Comment хэсэг (нээгдсэн бол) ──
           if (isCommentOpen) ...[
             const SizedBox(height: 10),
             _buildCommentSection(id, commentsList),
@@ -1442,7 +1533,6 @@ class FeedbackContentState extends State<FeedbackContent>
     );
   }
 
-  // ── Зураг grid ──
   String _fullMediaUrl(String url) {
     if (url.startsWith('http')) return url;
     return 'http://localhost:3000$url';
@@ -1532,15 +1622,19 @@ class FeedbackContentState extends State<FeedbackContent>
     );
   }
 
-  // ── Share bottom sheet ──
+  // ═══════════════════════════════════════════════════════════════════
+  //  ⭐ ШИНЭЧЛЭГДСЭН: SHARE — share_plus + Clipboard ашигладаг
+  // ═══════════════════════════════════════════════════════════════════
   void _showShareSheet({
     required String userName,
     required String message,
     required String busNumber,
     required String type,
   }) {
-    final shareText = '$userName${busNumber.isNotEmpty ? ' · $busNumber-р чиглэл' : ''}\n$message';
+    final shareText =
+        '$userName${busNumber.isNotEmpty ? ' · $busNumber-р чиглэл' : ''}\n$message';
     final shareUrl = 'https://bussmartbus.share/$type';
+    final fullText = '$shareText\n\n$shareUrl';
 
     showModalBottomSheet(
       context: context,
@@ -1554,7 +1648,6 @@ class FeedbackContentState extends State<FeedbackContent>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Handle bar
               Container(
                 width: 40,
                 height: 4,
@@ -1564,14 +1657,13 @@ class FeedbackContentState extends State<FeedbackContent>
                 ),
               ),
               const SizedBox(height: 16),
-
               const Text(
                 'Холбоос хуваалцах',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
 
-              // URL хуулах
+              // ── URL хуулах (ҮНЭХЭЭР clipboard руу) ──
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
@@ -1588,28 +1680,54 @@ class FeedbackContentState extends State<FeedbackContent>
                       ),
                     ),
                     GestureDetector(
-                      onTap: () {
-                        // Clipboard хуулах
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Холбоос хуулагдлаа!'),
-                            backgroundColor: Color(0xFFF57C00),
-                          ),
-                        );
+                      onTap: () async {
+                        await Clipboard.setData(ClipboardData(text: shareUrl));
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Холбоос хуулагдлаа!'),
+                              backgroundColor: Color(0xFFF57C00),
+                            ),
+                          );
+                        }
                       },
                       child: const Icon(Icons.copy, size: 20, color: Color(0xFFF57C00)),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
-              // Таалагдсан апп-ууд
+              // ── Системийн share карт (Instagram, TikTok, бүх апп) ──
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    await Share.share(fullText, subject: 'BusApp пост');
+                  },
+                  icon: const Icon(Icons.share, size: 18),
+                  label: const Text(
+                    'Бусад апп руу хуваалцах',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF57C00),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
               const Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Таалагдсан',
+                  'Шууд апп руу',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -1622,36 +1740,38 @@ class FeedbackContentState extends State<FeedbackContent>
                     icon: Icons.camera_alt,
                     label: 'Instagram',
                     color: const Color(0xFFE1306C),
-                    onTap: () => _launchShare('https://www.instagram.com/', shareText),
+                    onTap: () => _openApp('instagram://app', fullText),
                   ),
                   _shareIcon(
-                    icon: Icons.tiktok,
+                    icon: Icons.music_note,
                     label: 'TikTok',
                     color: Colors.black,
-                    onTap: () => _launchShare('https://www.tiktok.com/', shareText),
+                    onTap: () => _openApp('snssdk1233://', fullText),
                   ),
                   _shareIcon(
                     icon: Icons.chat,
                     label: 'Messenger',
                     color: const Color(0xFF0084FF),
-                    onTap: () => _launchShare('https://m.me/', shareText),
+                    onTap: () => _openApp(
+                        'fb-messenger://share?link=${Uri.encodeComponent(shareUrl)}',
+                        fullText),
                   ),
                   _shareIcon(
                     icon: Icons.email,
                     label: 'Gmail',
                     color: const Color(0xFFEA4335),
-                    onTap: () => _launchShare(
-                      'mailto:?subject=BusApp&body=${Uri.encodeComponent(shareText)}',
-                      shareText,
+                    onTap: () => _openApp(
+                      'mailto:?subject=BusApp&body=${Uri.encodeComponent(fullText)}',
+                      fullText,
                     ),
                   ),
                   _shareIcon(
                     icon: Icons.facebook,
                     label: 'Facebook',
                     color: const Color(0xFF1877F2),
-                    onTap: () => _launchShare(
-                      'https://www.facebook.com/sharer/sharer.php?quote=${Uri.encodeComponent(shareText)}',
-                      shareText,
+                    onTap: () => _openApp(
+                      'https://www.facebook.com/sharer/sharer.php?u=${Uri.encodeComponent(shareUrl)}&quote=${Uri.encodeComponent(shareText)}',
+                      fullText,
                     ),
                   ),
                 ],
@@ -1676,10 +1796,7 @@ class FeedbackContentState extends State<FeedbackContent>
           Container(
             width: 48,
             height: 48,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
             child: Icon(icon, color: Colors.white, size: 24),
           ),
           const SizedBox(height: 6),
@@ -1689,17 +1806,22 @@ class FeedbackContentState extends State<FeedbackContent>
     );
   }
 
-  void _launchShare(String url, String text) async {
+  Future<void> _openApp(String url, String fallbackText) async {
     Navigator.pop(context);
     try {
       final uri = Uri.parse(url);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        await Share.share(fallbackText);
       }
-    } catch (_) {}
+    } catch (_) {
+      try {
+        await Share.share(fallbackText);
+      } catch (_) {}
+    }
   }
 
-  // ── Comment section ──
   Widget _buildCommentSection(String feedbackId, List<dynamic> comments) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -1716,6 +1838,7 @@ class FeedbackContentState extends State<FeedbackContent>
               final c = entry.value;
               final cName = c['userName']?.toString() ?? 'Хэрэглэгч';
               final cMsg = c['message']?.toString() ?? '';
+              final cImg = c['imageUrl']?.toString() ?? '';
               final cTime = _timeAgo(c['createdAt']?.toString());
               final cLikes = c['likes'] ?? 0;
               final cLikedBy = c['likedBy'] as List<dynamic>? ?? [];
@@ -1745,7 +1868,6 @@ class FeedbackContentState extends State<FeedbackContent>
                               const SizedBox(width: 6),
                               Text(cTime, style: const TextStyle(fontSize: 11, color: Color(0xFF999999))),
                               const Spacer(),
-                              // Өөрийн comment бол ⋮ цэс
                               if (_currentUser != null && c['userId']?.toString() == _currentUser!['id'])
                                 PopupMenuButton<String>(
                                   padding: EdgeInsets.zero,
@@ -1762,9 +1884,29 @@ class FeedbackContentState extends State<FeedbackContent>
                                 ),
                             ]),
                             const SizedBox(height: 3),
-                            _buildMentionText(cMsg),
+                            if (cMsg.isNotEmpty) _buildMentionText(cMsg),
+                            // ⭐ ШИНЭ: Сэтгэгдэл доторх зураг
+                            if (cImg.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              GestureDetector(
+                                onTap: () => _showFullImage(_fullMediaUrl(cImg)),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.network(
+                                    _fullMediaUrl(cImg),
+                                    height: 140,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Container(
+                                      height: 140,
+                                      width: 140,
+                                      color: Colors.grey.shade200,
+                                      child: const Icon(Icons.broken_image, color: Colors.grey),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 4),
-                            // Like + Reply товчнууд
                             Row(children: [
                               GestureDetector(
                                 onTap: () => _likeComment(feedbackId, i),
@@ -1789,13 +1931,13 @@ class FeedbackContentState extends State<FeedbackContent>
                         )),
                       ],
                     ),
-                    // Replies
                     if (replies.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(left: 36, top: 6),
                         child: Column(children: replies.map((r) {
                           final rName = r['userName']?.toString() ?? '';
                           final rMsg = r['message']?.toString() ?? '';
+                          final rImg = r['imageUrl']?.toString() ?? '';
                           final rTime = _timeAgo(r['createdAt']?.toString());
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 6),
@@ -1811,6 +1953,26 @@ class FeedbackContentState extends State<FeedbackContent>
                                   Text(rTime, style: const TextStyle(fontSize: 10, color: Color(0xFF999999))),
                                 ]),
                                 _buildMentionText(rMsg, fontSize: 12),
+                                if (rImg.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  GestureDetector(
+                                    onTap: () => _showFullImage(_fullMediaUrl(rImg)),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: Image.network(
+                                        _fullMediaUrl(rImg),
+                                        height: 100,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => Container(
+                                          height: 100,
+                                          width: 100,
+                                          color: Colors.grey.shade200,
+                                          child: const Icon(Icons.broken_image, color: Colors.grey, size: 20),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ])),
                             ]),
                           );
@@ -1823,7 +1985,6 @@ class FeedbackContentState extends State<FeedbackContent>
 
           if (comments.isNotEmpty) Divider(height: 16, color: Colors.grey.shade300),
 
-          // Reply indicator
           if (_replyToIndex != null && _replyToCommentId == feedbackId)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1835,13 +1996,18 @@ class FeedbackContentState extends State<FeedbackContent>
                 Text('Хариулж байна...', style: TextStyle(fontSize: 11, color: const Color(0xFFF57C00))),
                 const Spacer(),
                 GestureDetector(
-                  onTap: () => setState(() { _replyToCommentId = null; _replyToIndex = null; _commentController.clear(); }),
+                  onTap: () => setState(() {
+                    _replyToCommentId = null;
+                    _replyToIndex = null;
+                    _commentController.clear();
+                    _commentImage = null;
+                    _commentImageBytes = null;
+                  }),
                   child: const Icon(Icons.close, size: 14, color: Color(0xFFF57C00)),
                 ),
               ]),
             ),
 
-          // Mention suggestions
           if (_mentionSuggestions.isNotEmpty)
             Container(
               constraints: const BoxConstraints(maxHeight: 120),
@@ -1878,18 +2044,76 @@ class FeedbackContentState extends State<FeedbackContent>
               ),
             ),
 
-          // Input
+          // ⭐ ШИНЭ: Сонгосон зургийн preview
+          if (_commentImage != null && _commentImageBytes != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Image.memory(
+                      _commentImageBytes!,
+                      width: 50,
+                      height: 50,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Зураг хавсаргасан',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF666666)),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => setState(() {
+                      _commentImage = null;
+                      _commentImageBytes = null;
+                    }),
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.close, size: 14, color: Colors.grey.shade700),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           Row(children: [
+            // ⭐ ШИНЭ: Зураг нэмэх товч
+            GestureDetector(
+              onTap: _currentUser == null ? null : _pickCommentImage,
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF57C00).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Icon(Icons.image_outlined,
+                    color: Color(0xFFF57C00), size: 18),
+              ),
+            ),
+            const SizedBox(width: 6),
             Expanded(child: TextField(
               controller: _commentController,
               style: const TextStyle(fontSize: 13),
               onChanged: (val) {
-                // @mention хайлт — зөвхөн @ бичсэн, [] хаагдаагүй бол
                 final lastAt = val.lastIndexOf('@');
                 final lastClose = val.lastIndexOf(']');
                 if (lastAt >= 0 && lastAt > lastClose && lastAt < val.length - 1) {
                   final afterAt = val.substring(lastAt + 1);
-                  // [ байвал бүрэн нэр хайх
                   if (afterAt.startsWith('[')) {
                     final query = afterAt.substring(1);
                     if (query.isNotEmpty && !query.contains(']')) {
@@ -1931,7 +2155,6 @@ class FeedbackContentState extends State<FeedbackContent>
             ),
           ]),
 
-          // @mention preview
           if (_commentController.text.contains('@['))
             Padding(
               padding: const EdgeInsets.only(top: 6),
@@ -1955,7 +2178,6 @@ class FeedbackContentState extends State<FeedbackContent>
     );
   }
 
-  // Mention хайлт
   Future<void> _searchMentionUsers(String query) async {
     try {
       final res = await http.get(Uri.parse('http://localhost:3000/api/users/search?q=$query'));
@@ -1966,8 +2188,25 @@ class FeedbackContentState extends State<FeedbackContent>
       setState(() => _mentionSuggestions = []);
     }
   }
+
+  // ⭐ ШИНЭ: Сэтгэгдэлд зураг сонгох
+  Future<void> _pickCommentImage() async {
+    try {
+      final file = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80,
+      );
+      if (file != null) {
+        final bytes = await file.readAsBytes();
+        setState(() {
+          _commentImage = file;
+          _commentImageBytes = Uint8List.fromList(bytes);
+        });
+      }
+    } catch (_) {}
+  }
+
   Widget _buildMentionText(String text, {double fontSize = 13}) {
-    // @[Name] форматыг таних
     final mentionRegex = RegExp(r'@\[([^\]]+)\]');
     final spans = <TextSpan>[];
     int lastEnd = 0;
@@ -1992,21 +2231,21 @@ class FeedbackContentState extends State<FeedbackContent>
     );
   }
 
-  // Comment like
   Future<void> _likeComment(String feedbackId, int commentIndex) async {
     if (_currentUser == null) return;
     if (_currentUser!['role'] == 'Админ' || _currentUser!['role'] == 'Жолооч') return;
     try {
-      await http.put(
+      final res = await http.put(
         Uri.parse('http://localhost:3000/api/feedback/$feedbackId/comment/$commentIndex/like'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'userId': _currentUser!['id']}),
       );
-      fetchFeedbacks();
+      if (res.statusCode == 200) {
+        _updateFeedbackInList(json.decode(res.body));
+      }
     } catch (_) {}
   }
 
-  // Comment устгах
   Future<void> _deleteComment(String feedbackId, int commentIndex) async {
     if (_currentUser == null) return;
     final confirm = await showDialog<bool>(
@@ -2027,16 +2266,17 @@ class FeedbackContentState extends State<FeedbackContent>
     );
     if (confirm != true) return;
     try {
-      await http.delete(
+      final res = await http.delete(
         Uri.parse('http://localhost:3000/api/feedback/$feedbackId/comment/$commentIndex'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'userId': _currentUser!['id']}),
       );
-      fetchFeedbacks();
+      if (res.statusCode == 200) {
+        _updateFeedbackInList(json.decode(res.body));
+      }
     } catch (_) {}
   }
 
-  // Comment засах
   Future<void> _editComment(String feedbackId, int commentIndex, String currentMsg) async {
     if (_currentUser == null) return;
     final editCtrl = TextEditingController(text: currentMsg);
@@ -2070,47 +2310,182 @@ class FeedbackContentState extends State<FeedbackContent>
     );
     if (newMsg == null || newMsg.isEmpty) return;
     try {
-      await http.put(
+      final res = await http.put(
         Uri.parse('http://localhost:3000/api/feedback/$feedbackId/comment/$commentIndex'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'userId': _currentUser!['id'], 'message': newMsg}),
       );
-      fetchFeedbacks();
+      if (res.statusCode == 200) {
+        _updateFeedbackInList(json.decode(res.body));
+      }
     } catch (_) {}
   }
 
-  // Reply
   Future<void> _submitReply(String feedbackId, int commentIndex) async {
-    if (_commentController.text.trim().isEmpty) return;
+    final hasText = _commentController.text.trim().isNotEmpty;
+    final hasImage = _commentImage != null;
+    if (!hasText && !hasImage) return;
+
     if (_currentUser == null) return;
     if (_currentUser!['role'] == 'Админ' || _currentUser!['role'] == 'Жолооч') return;
+
     final msg = _commentController.text.trim();
     final mentions = RegExp(r'@\[([^\]]+)\]').allMatches(msg).map((m) => m.group(1)!).toList();
+    final url = "http://localhost:3000/api/feedback/$feedbackId/comment/$commentIndex/reply";
+
     try {
-      await http.post(
-        Uri.parse('http://localhost:3000/api/feedback/$feedbackId/comment/$commentIndex/reply'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'message': msg,
-          'userName': _currentUser!['name'] ?? 'Хэрэглэгч',
-          'userId': _currentUser!['id'] ?? '',
-          'mentions': mentions,
-        }),
-      );
+      http.Response response;
+      if (hasImage) {
+        final request = http.MultipartRequest('POST', Uri.parse(url));
+        request.fields['message'] = msg;
+        request.fields['userName'] = _currentUser!['name'] ?? 'Хэрэглэгч';
+        request.fields['userId'] = _currentUser!['id'] ?? '';
+        request.fields['mentions'] = json.encode(mentions);
+        final bytes = await _commentImage!.readAsBytes();
+        request.files.add(http.MultipartFile.fromBytes(
+          'image',
+          bytes,
+          filename: _commentImage!.name,
+        ));
+        final streamed = await request.send();
+        response = await http.Response.fromStream(streamed);
+      } else {
+        response = await http.post(
+          Uri.parse(url),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'message': msg,
+            'userName': _currentUser!['name'] ?? 'Хэрэглэгч',
+            'userId': _currentUser!['id'] ?? '',
+            'mentions': mentions,
+          }),
+        );
+      }
+
+      if (response.statusCode == 200) {
+        _updateFeedbackInList(json.decode(response.body));
+      }
+
       _commentController.clear();
-      setState(() { _replyToCommentId = null; _replyToIndex = null; });
-      fetchFeedbacks();
+      setState(() {
+        _replyToCommentId = null;
+        _replyToIndex = null;
+        _commentImage = null;
+        _commentImageBytes = null;
+      });
     } catch (_) {}
   }
 
-  // =====================================================================
-  //  Шинэ post нэмэх (+ товч дарахад)  — ХУУЧИН КОДООР
-  // =====================================================================
+  Future<void> _editPost(String postId, String currentMessage) async {
+    if (_currentUser == null) return;
+    final editCtrl = TextEditingController(text: currentMessage);
+    final newMsg = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Text('Пост засах',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: TextField(
+          controller: editCtrl,
+          maxLines: 4,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: 'Текст...',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFFF57C00)),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Болих')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, editCtrl.text.trim()),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFF57C00),
+                foregroundColor: Colors.white),
+            child: const Text('Хадгалах'),
+          ),
+        ],
+      ),
+    );
+    if (newMsg == null || newMsg.isEmpty) return;
+    try {
+      final res = await http.put(
+        Uri.parse('http://localhost:3000/api/feedback/$postId'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'message': newMsg,
+          'userId': _currentUser!['id'],
+        }),
+      );
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        // Backend нь {message, feedback} буцаадаг
+        final updated = data['feedback'] ?? data;
+        _updateFeedbackInList(updated);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Пост засагдлаа!'),
+            backgroundColor: Color(0xFFF57C00),
+          ),
+        );
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _deletePost(String postId) async {
+    if (_currentUser == null) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Text('Пост устгах',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: const Text('Энэ постыг устгах уу?',
+            style: TextStyle(fontSize: 13)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Болих')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: const Text('Устгах'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await http.delete(
+        Uri.parse('http://localhost:3000/api/feedback/$postId'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'userId': _currentUser!['id']}),
+      );
+      // ⭐ Локалаар хасах — бүхэл reload хийхгүй
+      _removeFeedbackFromList(postId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Пост устгагдлаа'),
+            backgroundColor: Colors.grey,
+          ),
+        );
+      }
+    } catch (_) {}
+  }
+
   void _showAddDialog() {
     String selectedType = 'санал';
     String selectedCategory = '';
     bool isAnonymous = _currentUser == null;
-    // _selectedMedia хоослохгүй — камераас ирсэн зурагийг хадгална
 
     showModalBottomSheet(
       context: context,
@@ -2134,7 +2509,6 @@ class FeedbackContentState extends State<FeedbackContent>
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ── Handle bar ──
                     Center(
                       child: Container(
                         width: 40,
@@ -2147,7 +2521,6 @@ class FeedbackContentState extends State<FeedbackContent>
                     ),
                     const SizedBox(height: 12),
 
-                    // ── Header ──
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -2165,7 +2538,6 @@ class FeedbackContentState extends State<FeedbackContent>
                     ),
                     const SizedBox(height: 16),
 
-                    // ── Хэрэглэгчийн хаяг сонголт (зөвхөн санал/гомдол дээр) ──
                     if (_currentUser != null && (selectedType == 'санал' || selectedType == 'гомдол')) ...[
                       const Text('Нийтлэх хэлбэр:',
                           style: TextStyle(
@@ -2193,52 +2565,52 @@ class FeedbackContentState extends State<FeedbackContent>
                       const SizedBox(height: 16),
                     ],
 
-                    // ── Төрөл ──
-                    // ── Төрөл ──
-const Text('Төрөл:',
-    style: TextStyle(
-        fontSize: 13, fontWeight: FontWeight.w500)),
-const SizedBox(height: 8),
-
-// Row болон Expanded ашигласнаар гүйхгүй, шууд нэг шугамд багтана
-Row(
-  children: ['санал', 'гомдол', 'олдсон', 'мартсан'].map((t) {
-    final sel = selectedType == t;
-    return Expanded( // Дэлгэцийн өргөнийг тэнцүү хувааж өгнө
-      child: GestureDetector(
-        onTap: () => setModalState(() {
-          selectedType = t;
-          if (t == 'олдсон' || t == 'мартсан') isAnonymous = false;
-        }),
-        child: Container(
-          // Чипнүүдийн хооронд бага зэрэг зай авах (хамгийн сүүлчийнхээс бусад нь)
-          margin: const EdgeInsets.symmetric(horizontal: 4), 
-          padding: const EdgeInsets.symmetric(vertical: 10), // Дээд доод зай
-          alignment: Alignment.center, // Текстийг голд нь байрлуулах
-          decoration: BoxDecoration(
-            color: sel
-                ? _typeColor(t)
-                : Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            _typeLabel(t),
-            maxLines: 1, // Текст доошоо унахгүй нэг мөр байна
-            overflow: TextOverflow.ellipsis, // Хэрэв багтахгүй бол цэгээр тасална
-            style: TextStyle(
-              fontSize: 12, // Жижиг дэлгэц дээр багтаахын тулд хэмжээг 12 болгов
-              color: sel ? Colors.white : Colors.black87,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-      ),
-    );
-  }).toList(),
-),
+                    const Text('Төрөл:',
+                        style: TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: ['санал', 'гомдол', 'олдсон', 'мартсан']
+                          .map((t) {
+                        final sel = selectedType == t;
+                        return Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: GestureDetector(
+                              onTap: () => setModalState(() {
+                                selectedType = t;
+                                if (t == 'олдсон' || t == 'мартсан') {
+                                  isAnonymous = false;
+                                }
+                              }),
+                              child: Container(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 8),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: sel
+                                      ? _typeColor(t)
+                                      : Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  _typeLabel(t),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: sel
+                                        ? Colors.white
+                                        : Colors.black87,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
                     const SizedBox(height: 16),
 
-                    // ── Ангилал (олдсон үед) ──
                     if (selectedType == 'олдсон') ...[
                       const Text('Ангилал:',
                           style: TextStyle(
@@ -2283,7 +2655,6 @@ Row(
                       const SizedBox(height: 16),
                     ],
 
-                    // ── Автобусны чиглэлийн дугаар ──
                     const Text('Автобусны чиглэлийн дугаар',
                         style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
                     const SizedBox(height: 4),
@@ -2317,7 +2688,6 @@ Row(
                     ),
                     const SizedBox(height: 10),
 
-                    // ── Мессеж ──
                     _inputField(
                         _messageController,
                         selectedType == 'санал'
@@ -2330,7 +2700,6 @@ Row(
                         maxLines: 4),
                     const SizedBox(height: 12),
 
-                    // ── Сонгосон зураг/бичлэг preview ──
                     if (_selectedMedia.isNotEmpty) ...[
                       SizedBox(
                         height: 80,
@@ -2420,16 +2789,13 @@ Row(
                       const SizedBox(height: 12),
                     ],
 
-                    // ── 🖼 Галерей + Нийтлэх товчнууд ──
                     Row(
                       children: [
-                        // Галерей icon (дарахад зураг/бичлэг сонгоно)
                         _actionButton(
                           icon: Icons.photo_library_rounded,
                           onTap: () => _openGallery(setModalState),
                         ),
                         const Spacer(),
-                        // Нийтлэх
                         SizedBox(
                           height: 44,
                           child: ElevatedButton.icon(
@@ -2549,7 +2915,6 @@ Row(
     );
   }
 
-  // ── Туслах функцүүд ──
   String _timeAgo(String? dateStr) {
     if (dateStr == null) return '';
     final date = DateTime.tryParse(dateStr);

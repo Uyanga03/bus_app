@@ -18,7 +18,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   List<dynamic> _users = [];
   List<dynamic> _conversations = [];
   bool _isLoading = true;
-  String _filter = 'Бүгд'; // Бүгд, Уншаагүй
+  String _filter = 'Бүгд';
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -37,18 +37,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
   Future<void> _fetchData() async {
     setState(() => _isLoading = true);
     try {
-      // Хэрэглэгчдийн жагсаалт
       final usersRes = await http.get(
         Uri.parse('http://localhost:3000/api/chat/users'),
       );
-      // Миний яриануудын жагсаалт
       final convRes = await http.get(
         Uri.parse('http://localhost:3000/api/chat/conversations/${widget.user['id']}'),
       );
 
       if (usersRes.statusCode == 200) {
         final allUsers = json.decode(usersRes.body) as List;
-        // Өөрийгөө хасах
         _users = allUsers.where((u) => u['_id'] != widget.user['id']).toList();
       }
       if (convRes.statusCode == 200) {
@@ -58,7 +55,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
     setState(() => _isLoading = false);
   }
 
-  // Яриа эхлүүлэх / байгааг нээх
   Future<void> _openChat(String otherUserId, String otherUserName) async {
     try {
       final res = await http.post(
@@ -85,10 +81,84 @@ class _ChatListScreenState extends State<ChatListScreen> {
               ),
             ),
           );
-          _fetchData(); // Буцахад шинэчлэх
+          _fetchData();
         }
       }
     } catch (_) {}
+  }
+
+  // ── Чат устгах ──
+  Future<void> _deleteConversation(String conversationId) async {
+    try {
+      await http.delete(
+        Uri.parse('http://localhost:3000/api/chat/conversations/$conversationId'),
+      );
+      _fetchData();
+    } catch (_) {}
+  }
+
+  // ── Урт дарахад гарч ирэх bottom sheet ──
+  void _showDeleteSheet(String convId, String otherName) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Drag handle
+              Container(
+                margin: const EdgeInsets.only(top: 8, bottom: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // Чатын нэр
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                child: Text(
+                  otherName,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const Divider(height: 20),
+              // Устгах сонголт
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text(
+                  'Устгах',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _deleteConversation(convId);
+                },
+              ),
+              // Болих сонголт
+              ListTile(
+                leading: const Icon(Icons.close, color: Colors.grey),
+                title: const Text('Болих'),
+                onTap: () => Navigator.pop(ctx),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -147,11 +217,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   Expanded(
                     child: TextField(
                       controller: _searchController,
-                      onChanged: (v) => setState(() => _searchQuery = v.trim().toLowerCase()),
+                      onChanged: (v) =>
+                          setState(() => _searchQuery = v.trim().toLowerCase()),
                       style: const TextStyle(fontSize: 14),
                       decoration: const InputDecoration(
                         hintText: 'Хайх',
-                        hintStyle: TextStyle(fontSize: 14, color: Color(0xFFAAAAAA)),
+                        hintStyle:
+                            TextStyle(fontSize: 14, color: Color(0xFFAAAAAA)),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: EdgeInsets.symmetric(vertical: 10),
@@ -163,7 +235,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
             ),
           ),
 
-          // ── Хэрэглэгчдийн дугуйнууд (хэвтээ scroll) ──
+          // ── Хэрэглэгчдийн дугуйнууд ──
           if (_users.isNotEmpty)
             SizedBox(
               height: 80,
@@ -174,7 +246,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 itemBuilder: (_, i) {
                   final u = _users[i];
                   final name = u['name']?.toString() ?? '';
-                  if (_searchQuery.isNotEmpty && !name.toLowerCase().contains(_searchQuery)) {
+                  if (_searchQuery.isNotEmpty &&
+                      !name.toLowerCase().contains(_searchQuery)) {
                     return const SizedBox.shrink();
                   }
                   return GestureDetector(
@@ -224,7 +297,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   child: GestureDetector(
                     onTap: () => setState(() => _filter = f),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 6),
                       decoration: BoxDecoration(
                         color: isActive ? _orange : Colors.grey.shade200,
                         borderRadius: BorderRadius.circular(16),
@@ -256,7 +330,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
           Expanded(
             child: _isLoading
-                ? Center(child: CircularProgressIndicator(color: _orange))
+                ? const Center(
+                    child: CircularProgressIndicator(color: _orange))
                 : _conversations.isEmpty
                     ? const Center(
                         child: Text('Одоогоор чат байхгүй',
@@ -266,42 +341,62 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         itemCount: _conversations.length,
                         itemBuilder: (_, i) {
                           final conv = _conversations[i];
-                          final participants = conv['participantNames'] as List<dynamic>? ?? [];
-                          final otherName = participants.firstWhere(
-                            (n) => n != widget.user['name'],
-                            orElse: () => 'Хэрэглэгч',
-                          );
-                          final lastMsg = conv['lastMessage']?.toString() ?? '';
+                          final participants =
+                              conv['participantNames'] as List<dynamic>? ?? [];
+                          final otherName = participants
+                              .firstWhere(
+                                (n) => n != widget.user['name'],
+                                orElse: () => 'Хэрэглэгч',
+                              )
+                              .toString();
+                          final lastMsg =
+                              conv['lastMessage']?.toString() ?? '';
+                          final convId = conv['_id'].toString();
 
                           return ListTile(
                             leading: CircleAvatar(
                               backgroundColor: _orange.withOpacity(0.15),
                               child: Text(
-                                otherName.toString().isNotEmpty
-                                    ? otherName.toString()[0].toUpperCase()
+                                otherName.isNotEmpty
+                                    ? otherName[0].toUpperCase()
                                     : '?',
                                 style: const TextStyle(
-                                    fontWeight: FontWeight.bold, color: _orange),
+                                    fontWeight: FontWeight.bold,
+                                    color: _orange),
                               ),
                             ),
                             title: Text(
-                              otherName.toString(),
+                              otherName,
                               style: const TextStyle(
                                   fontWeight: FontWeight.w600, fontSize: 14),
                             ),
                             subtitle: Text(
                               lastMsg,
                               style: TextStyle(
-                                  fontSize: 12, color: Colors.grey.shade500),
+                                  fontSize: 12,
+                                  color: Colors.grey.shade500),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.more_vert,
+                                  color: Colors.grey),
+                              onPressed: () =>
+                                  _showDeleteSheet(convId, otherName),
+                            ),
                             onTap: () {
-                              final otherUserId = (conv['participants'] as List<dynamic>)
-                                  .firstWhere((id) => id != widget.user['id'], orElse: () => '');
-                              _openChat(otherUserId, otherName.toString());
+                              final otherUserId =
+                                  (conv['participants'] as List<dynamic>)
+                                      .firstWhere(
+                                        (id) => id != widget.user['id'],
+                                        orElse: () => '',
+                                      )
+                                      .toString();
+                              _openChat(otherUserId, otherName);
                             },
+                            // ── Урт даралт (утсан дээр) ──
+                            onLongPress: () =>
+                                _showDeleteSheet(convId, otherName),
                           );
                         },
                       ),

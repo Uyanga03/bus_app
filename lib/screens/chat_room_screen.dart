@@ -3,7 +3,6 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'dart:convert';
 import 'dart:async';
-import 'dart:typed_data';
 
 class ChatRoomScreen extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -36,7 +35,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     super.initState();
     _fetchMessages();
     _markAsRead();
-    // 3 секунд тутамд шинэ мессеж шалгах (polling)
     _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) => _fetchMessages());
   }
 
@@ -86,7 +84,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
-
     _messageController.clear();
 
     try {
@@ -182,30 +179,18 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                     widget.otherUserName.isNotEmpty
                         ? widget.otherUserName[0].toUpperCase()
                         : '?',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: _orange,
-                    ),
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: _orange),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.otherUserName,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const Text(
-                        '',
-                        style: TextStyle(color: Colors.white70, fontSize: 11),
-                      ),
-                    ],
+                  child: Text(
+                    widget.otherUserName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -216,7 +201,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           // ── Мессежүүд ──
           Expanded(
             child: _isLoading
-                ? Center(child: CircularProgressIndicator(color: _orange))
+                ? const Center(child: CircularProgressIndicator(color: _orange))
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -233,12 +218,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               top: false,
               child: Row(
                 children: [
-                  // Камер icon
                   GestureDetector(
                     onTap: _sendImage,
                     child: Container(
-                      width: 36,
-                      height: 36,
+                      width: 36, height: 36,
                       decoration: BoxDecoration(
                         color: _orange.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
@@ -247,12 +230,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                     ),
                   ),
                   const SizedBox(width: 6),
-                  // Зураг icon
                   GestureDetector(
                     onTap: _sendImage,
                     child: Container(
-                      width: 36,
-                      height: 36,
+                      width: 36, height: 36,
                       decoration: BoxDecoration(
                         color: _orange.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
@@ -261,7 +242,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Текст оруулах
                   Expanded(
                     child: Container(
                       height: 40,
@@ -283,12 +263,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  // Илгээх товч
                   GestureDetector(
                     onTap: _sendMessage,
                     child: Container(
-                      width: 40,
-                      height: 40,
+                      width: 40, height: 40,
                       decoration: BoxDecoration(
                         color: _orange,
                         borderRadius: BorderRadius.circular(20),
@@ -316,7 +294,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: GestureDetector(
+        // Утсан дээр удаан дарах
         onLongPress: isMe ? () => _showMessageOptions(msgId, text) : null,
+        // Компьютер дээр баруун товч
+        onSecondaryTap: isMe ? () => _showMessageOptions(msgId, text) : null,
         child: Container(
           margin: const EdgeInsets.symmetric(vertical: 3),
           constraints: BoxConstraints(
@@ -325,46 +306,76 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           child: Column(
             crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
-              // Зураг
               if (imageUrl.isNotEmpty)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: Image.network(
                     'http://localhost:3000$imageUrl',
-                    width: 200,
-                    height: 150,
-                    fit: BoxFit.cover,
+                    width: 200, height: 150, fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => Container(
                       width: 200, height: 150, color: Colors.grey.shade200,
                       child: const Icon(Icons.broken_image),
                     ),
                   ),
                 ),
-              // Текст
               if (text.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: isMe ? _orange : Colors.white,
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(16),
-                      topRight: const Radius.circular(16),
-                      bottomLeft: Radius.circular(isMe ? 16 : 4),
-                      bottomRight: Radius.circular(isMe ? 4 : 16),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isMe ? _orange : Colors.white,
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(16),
+                            topRight: const Radius.circular(16),
+                            bottomLeft: Radius.circular(isMe ? 16 : 4),
+                            bottomRight: Radius.circular(isMe ? 4 : 16),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            )
+                          ],
+                        ),
+                        child: Text(
+                          text,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: isMe ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                      ),
                     ),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 1))],
-                  ),
-                  child: Text(text, style: TextStyle(fontSize: 14, color: isMe ? Colors.white : Colors.black87)),
+                    // ── ⋮ товч өөрийн мессеж дээр ──
+                    if (isMe)
+                      InkWell(
+                        onTap: () => _showMessageOptions(msgId, text),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 2, bottom: 4),
+                          child: Icon(
+                            Icons.more_vert,
+                            size: 18,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               const SizedBox(height: 2),
-              // Цаг + харсан/хараагүй icon
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(time, style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
                   if (isMe && isRead) ...[
                     const SizedBox(width: 3),
-                    Icon(Icons.visibility, size: 12, color: const Color(0xFF4CAF50)),
+                    const Icon(Icons.visibility, size: 12, color: Color(0xFF4CAF50)),
                   ],
                 ],
               ),
@@ -375,16 +386,23 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     );
   }
 
-  // Мессеж засах/устгах popup
   void _showMessageOptions(String msgId, String currentText) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
       builder: (ctx) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const SizedBox(height: 8),
-          Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+          Container(
+            width: 40, height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
           const SizedBox(height: 16),
           ListTile(
             leading: const Icon(Icons.edit, color: Color(0xFFF57C00)),
@@ -402,28 +420,33 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     );
   }
 
-  // Мессеж засах
   Future<void> _editMessage(String msgId, String currentText) async {
     final editCtrl = TextEditingController(text: currentText);
     final newText = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Text('Мессеж засах', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        title: const Text('Мессеж засах',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         content: TextField(
           controller: editCtrl,
           autofocus: true,
           decoration: InputDecoration(
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFF57C00))),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFFF57C00)),
+            ),
           ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Болих')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, editCtrl.text.trim()),
-            style: ElevatedButton.styleFrom(backgroundColor: _orange, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _orange,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Хадгалах'),
           ),
         ],
@@ -440,19 +463,22 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     } catch (_) {}
   }
 
-  // Мессеж устгах
   Future<void> _deleteMessage(String msgId) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Text('Мессеж устгах', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        title: const Text('Мессеж устгах',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         content: const Text('Энэ мессежийг устгах уу?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Болих')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Устгах'),
           ),
         ],

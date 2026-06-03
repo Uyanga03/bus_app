@@ -1513,6 +1513,7 @@ class FeedbackContentState extends State<FeedbackContent>
               const SizedBox(width: 20),
               GestureDetector(
                 onTap: () => _showShareSheet(
+                  postId: id,
                   userName: userName,
                   message: message,
                   busNumber: busNumber,
@@ -1630,6 +1631,7 @@ class FeedbackContentState extends State<FeedbackContent>
     required String message,
     required String busNumber,
     required String type,
+    required String postId,
   }) {
     final shareText =
         '$userName${busNumber.isNotEmpty ? ' · $busNumber-р чиглэл' : ''}\n$message';

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'post_detail_screen.dart';
 
 class NotificationScreen extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -65,6 +66,14 @@ class _NotificationScreenState extends State<NotificationScreen> {
         return Icons.favorite;
       case 'comment':
         return Icons.chat_bubble;
+      case 'comment_like':
+        return Icons.favorite_border;
+      case 'reply':
+        return Icons.reply;
+      case 'mention':
+        return Icons.alternate_email;
+      case 'match':
+        return Icons.search;
       case 'chat':
         return Icons.send;
       default:
@@ -75,9 +84,15 @@ class _NotificationScreenState extends State<NotificationScreen> {
   Color _typeColor(String type) {
     switch (type) {
       case 'like':
+      case 'comment_like':
         return Colors.red.shade400;
       case 'comment':
+      case 'reply':
         return Colors.blue.shade400;
+      case 'mention':
+        return _orange;
+      case 'match':
+        return Colors.green.shade500;
       case 'chat':
         return _orange;
       default:
@@ -127,7 +142,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
           // ── Body ──
           Expanded(
             child: _isLoading
-                ? Center(child: CircularProgressIndicator(color: _orange))
+                ? const Center(child: CircularProgressIndicator(color: _orange))
                 : _notifications.isEmpty
                     ? const Center(
                         child: Column(
@@ -153,15 +168,25 @@ class _NotificationScreenState extends State<NotificationScreen> {
                             final notif = _notifications[i];
                             final type = notif['type']?.toString() ?? '';
                             final msg = notif['message']?.toString() ?? '';
-                            final fromName = notif['fromName']?.toString() ?? '';
                             final time = _timeAgo(notif['createdAt']?.toString());
                             final isRead = notif['isRead'] == true;
+                            final postId = notif['postId']?.toString() ?? '';
 
                             return Container(
                               color: isRead
                                   ? Colors.white
                                   : _orange.withOpacity(0.05),
                               child: ListTile(
+                                onTap: postId.isNotEmpty
+                                    ? () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => PostDetailScreen(postId: postId),
+                                          ),
+                                        );
+                                      }
+                                    : null,
                                 leading: CircleAvatar(
                                   radius: 20,
                                   backgroundColor:
@@ -184,6 +209,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                   style: const TextStyle(
                                       fontSize: 11, color: Color(0xFF999999)),
                                 ),
+                                trailing: postId.isNotEmpty
+                                    ? Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 20)
+                                    : null,
                                 contentPadding: const EdgeInsets.symmetric(
                                     horizontal: 16, vertical: 4),
                               ),

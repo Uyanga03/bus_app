@@ -1551,8 +1551,8 @@ app.put('/api/chat/messages/read', async (req, res) => {
   try {
     const { conversationId, userId } = req.body;
     await Message.updateMany(
-      { conversationId, senderId: { $ne: userId }, read: false },
-      { read: true },
+      { conversationId, senderId: { $ne: userId }, isRead: false },
+      { isRead: true },
     );
     res.json({ message: 'ok' });
   } catch (err) {

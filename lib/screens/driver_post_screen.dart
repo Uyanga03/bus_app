@@ -27,6 +27,7 @@ class _DriverPostScreenState extends State<DriverPostScreen> {
   List<Uint8List> _selectedBytes = [];
   bool _isLoading = false;
   String _selectedCategory = '';
+  final TextEditingController _otherDetailController = TextEditingController();
 
   static const _orange = Color(0xFFF57C00);
   static const _darkHeader = Color(0xFF5D4037);
@@ -67,6 +68,7 @@ class _DriverPostScreenState extends State<DriverPostScreen> {
     _dateController.dispose();
     _locationController.dispose();
     _noteController.dispose();
+    _otherDetailController.dispose();
     super.dispose();
   }
 
@@ -135,6 +137,12 @@ class _DriverPostScreenState extends State<DriverPostScreen> {
       return;
     }
 
+    // ⭐ "Бусад эд зүйл" сонгосон бол нэмэлт тайлбар заавал бичих
+    if (_selectedCategory == 'Бусад эд зүйл' && _otherDetailController.text.trim().isEmpty) {
+      _showSnackBar('Юу олдсон болохыг заавал бичнэ үү');
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -153,6 +161,10 @@ class _DriverPostScreenState extends State<DriverPostScreen> {
 
       // Мессеж бүрдүүлэх
       final msgParts = <String>[];
+      // ⭐ "Бусад" сонгосон бол юу олдсоныг эхэнд оруулах (тааруулгад ашиглана)
+      if (_selectedCategory == 'Бусад эд зүйл' && _otherDetailController.text.trim().isNotEmpty) {
+        msgParts.add('${_otherDetailController.text.trim()} олдлоо');
+      }
       if (_busNumberController.text.trim().isNotEmpty) {
         msgParts.add('Автобус: ${_busNumberController.text.trim()}');
       }
@@ -398,7 +410,55 @@ class _DriverPostScreenState extends State<DriverPostScreen> {
                       );
                     }).toList(),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
+
+                  // ⭐ "Бусад эд зүйл" сонгосон үед нэмэлт талбар
+                  if (_selectedCategory == 'Бусад эд зүйл') ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _orange.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: _orange.withOpacity(0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(children: [
+                            const Icon(Icons.info_outline, size: 16, color: _orange),
+                            const SizedBox(width: 6),
+                            const Expanded(
+                              child: Text('Юу олдсон болохыг 1-2 үгээр бичнэ үү',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _orange)),
+                            ),
+                          ]),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: _otherDetailController,
+                            style: const TextStyle(fontSize: 13),
+                            decoration: InputDecoration(
+                              hintText: 'Жнь: чихэвч, шүхэр, ном...',
+                              hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                              filled: true,
+                              fillColor: Colors.white,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(6),
+                                borderSide: BorderSide(color: Colors.grey.shade300),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(6),
+                                borderSide: const BorderSide(color: _orange),
+                              ),
+                              isDense: true,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  const SizedBox(height: 4),
 
                   // ── Чиглэл ──
                   _buildField(

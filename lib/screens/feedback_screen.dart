@@ -2486,6 +2486,7 @@ class FeedbackContentState extends State<FeedbackContent>
 
   void _showAddDialog() {
     String selectedType = 'санал';
+    String otherCategoryDetail = '';
     String selectedCategory = '';
     bool isAnonymous = _currentUser == null;
 
@@ -2652,9 +2653,57 @@ class FeedbackContentState extends State<FeedbackContent>
                                   )),
                             ),
                           );
-                        }).toList(),
+                       }).toList(),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
+                      
+                      // ⭐ "Бусад эд зүйл" сонгосон үед нэмэлт талбар
+                      if (selectedCategory == 'Бусад эд зүйл') ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF57C00).withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFF57C00).withOpacity(0.3)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Row(children: [
+                                Icon(Icons.info_outline, size: 16, color: Color(0xFFF57C00)),
+                                SizedBox(width: 6),
+                                Expanded(
+                                  child: Text('Юу олдсон болохыг 1-2 үгээр бичнэ үү',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFF57C00))),
+                                ),
+                              ]),
+                              const SizedBox(height: 6),
+                              TextField(
+                                onChanged: (val) => otherCategoryDetail = val,
+                                style: const TextStyle(fontSize: 13),
+                                decoration: InputDecoration(
+                                  hintText: 'Жнь: чихэвч, шүхэр, ном...',
+                                  hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                    borderSide: BorderSide(color: Colors.grey.shade300),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                    borderSide: const BorderSide(color: Color(0xFFF57C00)),
+                                  ),
+                                  isDense: true,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      const SizedBox(height: 4),
                     ],
 
                     const Text('Автобусны чиглэлийн дугаар',
@@ -2801,9 +2850,21 @@ class FeedbackContentState extends State<FeedbackContent>
                         SizedBox(
                           height: 44,
                           child: ElevatedButton.icon(
-                            onPressed: () => submitFeedback(selectedType,
-                                anonymous: isAnonymous,
-                                category: selectedCategory),
+                            onPressed: () {
+                              if (selectedType == 'олдсон' && selectedCategory == 'Бусад эд зүйл' && otherCategoryDetail.trim().isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Юу олдсон болохыг заавал бичнэ үү'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                                return;
+                              }
+                              if (selectedType == 'олдсон' && selectedCategory == 'Бусад эд зүйл' && otherCategoryDetail.trim().isNotEmpty) {
+                                _messageController.text = '${otherCategoryDetail.trim()} олдлоо\n${_messageController.text}';
+                              }
+                              submitFeedback(selectedType, anonymous: isAnonymous, category: selectedCategory);
+                            },
                             icon: const Icon(Icons.send, size: 18),
                             label: const Text('Нийтлэх',
                                 style: TextStyle(
